@@ -28,7 +28,7 @@ build:
 # generated IDL (single source of truth, derived from declare_id!).
 verify-program-id:
 	@expected=$$(grep -o '"publicKey": *"[^"]*"' idl/dvp_swap_program.json | head -1 | sed 's/.*"\([^"]*\)"$$/\1/'); \
-	actual=$$(solana-keygen pubkey ../target/deploy/dvp_swap_program-keypair.json); \
+	actual=$$(solana-keygen pubkey target/deploy/dvp_swap_program-keypair.json); \
 	if [ "$$expected" != "$$actual" ]; then \
 		echo "ERROR: deploy keypair $$actual does not match program ID $$expected"; \
 		exit 1; \
@@ -77,14 +77,14 @@ all-test: unit-test integration-test
 # Run unit tests with coverage
 unit-coverage:
 	@echo "Running unit tests with coverage..."
-	@mkdir -p ../coverage
-	@cd program && cargo llvm-cov --lib --tests --lcov --output-path ../../coverage/coverage-dvp-swap-unit.lcov
+	@mkdir -p coverage
+	@cd program && cargo llvm-cov --lib --tests --lcov --output-path ../coverage/coverage-dvp-swap-unit.lcov
 
 # Generate HTML coverage report
 coverage-html:
 	@echo "Generating HTML coverage report..."
-	@mkdir -p ../coverage
-	@cd program && cargo llvm-cov --html --output-dir ../../coverage/coverage-dvp-swap-html
+	@mkdir -p coverage
+	@cd program && cargo llvm-cov --html --output-dir ../coverage/coverage-dvp-swap-html
 
 # Run all coverage tasks
 all-coverage: unit-coverage coverage-html

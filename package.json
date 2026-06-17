@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "description": "DvP Swap Program",
-  "repository": "git@github.com:solana-foundation/contra.git",
+  "repository": "git@github.com:solana-foundation/dvp.git",
   "license": "MIT",
   "scripts": {
     "build": "cd clients/typescript && tsc",
