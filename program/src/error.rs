@@ -47,8 +47,10 @@ pub enum DvpSwapProgramError {
     ZeroAmount,
 
     /// (10) Mint carries a Token-2022 extension the swap program refuses
-    /// to support (transfer fee, confidential transfer fee config,
-    /// interest bearing, scaled UI amount, non-transferable).
+    /// to support (transfer fee, interest bearing, scaled UI amount,
+    /// non-transferable). A confidential transfer fee config is also
+    /// rejected, but only implicitly: it always co-occurs with a transfer
+    /// fee config, which the explicit check already blocks.
     /// Checked only at CreateDvp.
     #[error("Mint carries an unsupported Token-2022 extension")]
     BlockedMintExtension,
