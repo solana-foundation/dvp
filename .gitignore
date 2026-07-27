@@ -26,6 +26,9 @@ dist/
 .env.*
 !.env.example
 
+# Program + deployer keypairs (managed secrets, never committed)
+keys/
+
 # Editor / tooling
 .vscode/
 .idea/

@@ -104,7 +104,7 @@ describe("canonical derivation helpers (verify-before-fund)", () => {
   // Solana CLI, mirroring the on-chain seed order
   // [b"dvp", settlement_authority, user_a, user_b, mint_a, mint_b, nonce_le]:
   //
-  //   solana find-program-derived-address DzG1qJupt6Khm8s8jB3p93NkhPoiAg2M7vkEhkS15CtC \
+  //   solana find-program-derived-address dvp34bdbcEm4f4FCUjGV4mDAkDshaQR4LkK8fdcsyZq \
   //     string:dvp \
   //     hex:0505050505050505050505050505050505050505050505050505050505050505 \  (settlement_authority = addressOf(5))
   //     hex:0101010101010101010101010101010101010101010101010101010101010101 \  (user_a = addressOf(1))
