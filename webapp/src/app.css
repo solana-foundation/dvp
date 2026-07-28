@@ -87,11 +87,14 @@ a {
 	text-decoration: none;
 }
 
-/* Buttons don't inherit color/font by default — make them, so bare buttons
-   (role cards, chips) render in the page's text color instead of system black. */
+/* Buttons don't inherit color/font and carry a system background by default —
+   reset all three so bare buttons (role cards, chips, pills) match the dark UI
+   instead of rendering system-black text on a light buttonface. */
 button {
 	color: inherit;
 	font-family: inherit;
+	background: none;
+	cursor: pointer;
 }
 
 h1,

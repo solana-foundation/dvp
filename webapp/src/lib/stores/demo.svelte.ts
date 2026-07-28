@@ -156,29 +156,45 @@ class DemoStore {
 		});
 	}
 
-	async createTrade() {
+	async createTrade(opts?: {
+		amountA?: bigint;
+		amountB?: bigint;
+		expirySeconds?: number;
+		ref?: string;
+	}) {
 		if (!this.mints) return;
 		await this.run('Creating the DvP', async () => {
 			const nonce = crypto.getRandomValues(new BigUint64Array(1))[0];
+			const expirySeconds = opts?.expirySeconds ?? PRESET.expirySeconds;
 			const terms: TradeTerms = {
 				settlementAuthority: address(this.addresses.authority),
 				userA: address(this.addresses.partyA),
 				userB: address(this.addresses.partyB),
 				mintA: address(this.mints!.asset),
 				mintB: address(this.mints!.cash),
-				amountA: PRESET.amountA,
-				amountB: PRESET.amountB,
+				amountA: opts?.amountA ?? PRESET.amountA,
+				amountB: opts?.amountB ?? PRESET.amountB,
 				decimalsA: ASSET_TOKEN.decimals,
 				decimalsB: CASH_TOKEN.decimals,
 				nonce,
-				expiryTimestamp: BigInt(Math.floor(Date.now() / 1000) + PRESET.expirySeconds),
-				ref: 'DEMO-' + nonce.toString().slice(-6)
+				expiryTimestamp: BigInt(Math.floor(Date.now() / 1000) + expirySeconds),
+				ref: (opts?.ref && opts.ref.trim()) || 'DEMO-' + nonce.toString().slice(-6)
 			};
 			const { signature, addresses } = await createDvp(this.rpcOrThrow(), this.signerFor('maker'), terms);
 			this.trade = { terms, addresses, createdAt: Date.now(), closedBy: null };
 			this.pushLog('Create DvP', signature);
 			await this.refresh();
 		});
+	}
+
+	/** Clear the finished trade and step back to Create, keeping the same wallets. */
+	async newTrade() {
+		this.trade = null;
+		this.escrowA = 0n;
+		this.escrowB = 0n;
+		this.error = null;
+		this.activeRole = 'maker';
+		await this.refresh();
 	}
 
 	async fund(leg: 'A' | 'B') {

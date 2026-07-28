@@ -1,25 +1,42 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
-	import RainBackground from '$lib/components/RainBackground.svelte';
+	import SettlementFlow from '$lib/components/SettlementFlow.svelte';
 	import { demo } from '$lib/stores/demo.svelte';
 	import {
 		ROLES,
 		ASSET_TOKEN,
 		CASH_TOKEN,
-		PRESET,
 		PROGRAM_ID,
 		CLUSTER,
 		explorerTx,
+		explorerAddress,
 		type RoleKey
 	} from '$lib/config';
-	import { formatAmount, shortAddress, formatCountdown } from '$lib/format';
+	import { formatAmount, parseAmount, shortAddress, formatCountdown } from '$lib/format';
 
 	let { data } = $props();
 
 	onMount(() => {
 		demo.init();
 	});
+
+	// Maker's editable terms, with sensible defaults.
+	let assetAmt = $state('100');
+	let cashAmt = $state('10,000');
+	let expiryMin = $state('60');
+	let refStr = $state('');
+	function submitCreate() {
+		try {
+			const amountA = parseAmount(assetAmt, ASSET_TOKEN.decimals);
+			const amountB = parseAmount(cashAmt, CASH_TOKEN.decimals);
+			if (amountA <= 0n || amountB <= 0n) throw new Error('zero');
+			const expirySeconds = Math.max(60, Math.round((parseFloat(expiryMin) || 60) * 60));
+			demo.createTrade({ amountA, amountB, expirySeconds, ref: refStr });
+		} catch {
+			demo.error = 'Enter valid, non-zero amounts.';
+		}
+	}
 
 	let copied = $state('');
 	function copy(text: string, label = '') {
@@ -85,9 +102,15 @@
 		</div>
 		<div class="topbar-right">
 			<span class="pill"><span class="dot live"></span>{CLUSTER}</span>
-			<button class="pill mono" onclick={() => copy(PROGRAM_ID, 'program id')} title="Copy program ID">
-				{shortAddress(PROGRAM_ID, 6, 6)}
-			</button>
+			<a
+				class="pill mono"
+				href={explorerAddress(PROGRAM_ID)}
+				target="_blank"
+				rel="noopener"
+				title="View program on Solana Explorer ({CLUSTER})"
+			>
+				{shortAddress(PROGRAM_ID, 6, 6)} ↗
+			</a>
 			{#if demo.started}
 				<button class="btn btn-ghost btn-sm" onclick={() => demo.reset()}>Reset demo</button>
 			{/if}
@@ -95,7 +118,7 @@
 	</header>
 
 	<section class="hero">
-		<RainBackground />
+		<SettlementFlow />
 		<div class="hero-inner">
 			<p class="eyebrow">Live demo · Atomic settlement</p>
 			<h1>Delivery versus Payment,<br />settled atomically.</h1>
@@ -164,6 +187,7 @@
 				You are acting as
 				<b style="color:{roleColor[demo.activeRole]}">{roleLabel(demo.activeRole)}</b>
 				<span class="faint mono">· {demo.balances.sol[demo.activeRole].toFixed(3)} SOL</span>
+				<span class="tip">— click a role above to act as someone else</span>
 			</div>
 
 			{#if !demo.started}
@@ -192,29 +216,73 @@
 				{#if !demo.trade}
 					<div class="create-card card">
 						<div>
-							<p class="eyebrow">Step 1 — Maker</p>
+							<p class="eyebrow">Step 1 — Maker defines the trade</p>
 							<h2>Create the trade ticket</h2>
 							<p class="muted">
-								Party A will deliver
-								<b style="color:var(--asset)"
-									>{formatAmount(PRESET.amountA, ASSET_TOKEN.decimals, { compact: true })}
-									{ASSET_TOKEN.symbol}</b
-								>
-								for Party B's
-								<b style="color:var(--cash)"
-									>{formatAmount(PRESET.amountB, CASH_TOKEN.decimals, { compact: true })}
-									{CASH_TOKEN.symbol}</b
-								>. The Settlement Authority is the only one who can settle.
+								Set the terms. Party A delivers the asset; Party B delivers the cash. The Settlement
+								Authority is the only one who can settle it.
 							</p>
 						</div>
-						<button
-							class="btn btn-primary"
-							onclick={() => demo.createTrade()}
-							disabled={!!demo.busy || !isMaker()}
-						>
+						<div class="form">
+							<label>
+								<span class="eyebrow">Asset leg — Party A delivers</span>
+								<div class="field">
+									<input inputmode="decimal" bind:value={assetAmt} disabled={!isMaker() || !!demo.busy} />
+									<span class="suffix" style="color:var(--asset)">{ASSET_TOKEN.symbol}</span>
+								</div>
+								<span class="sub faint"
+									>Party A holds {formatAmount(demo.balances.partyA.asset, ASSET_TOKEN.decimals, {
+										compact: true
+									})}
+									{ASSET_TOKEN.symbol}</span
+								>
+							</label>
+							<label>
+								<span class="eyebrow">Cash leg — Party B delivers</span>
+								<div class="field">
+									<input inputmode="decimal" bind:value={cashAmt} disabled={!isMaker() || !!demo.busy} />
+									<span class="suffix" style="color:var(--cash)">{CASH_TOKEN.symbol}</span>
+								</div>
+								<span class="sub faint"
+									>Party B holds {formatAmount(demo.balances.partyB.cash, CASH_TOKEN.decimals, {
+										compact: true
+									})}
+									{CASH_TOKEN.symbol}</span
+								>
+							</label>
+							<label>
+								<span class="eyebrow">Expires in</span>
+								<div class="field">
+									<input inputmode="numeric" bind:value={expiryMin} disabled={!isMaker() || !!demo.busy} />
+									<span class="suffix">min</span>
+								</div>
+							</label>
+							<label>
+								<span class="eyebrow">Reference (optional)</span>
+								<div class="field">
+									<input bind:value={refStr} placeholder="off-chain order id" disabled={!isMaker() || !!demo.busy} />
+								</div>
+							</label>
+							<div class="confidential" title="Coming soon: hide the cash amount using Token-2022 confidential transfers.">
+								<span class="switch" role="switch" aria-checked="false" aria-disabled="true"></span>
+								<div class="confidential-text">
+									<span>Confidential cash leg <span class="soon">in development</span></span>
+									<span class="sub faint"
+										>Settle so no observer can see the {CASH_TOKEN.symbol} amount the asset traded for — only
+										the two parties know the price. Built on Token-2022 confidential transfers.</span
+									>
+								</div>
+							</div>
+						</div>
+						<button class="btn btn-primary" onclick={submitCreate} disabled={!!demo.busy || !isMaker()}>
 							{demo.busy ?? 'Create DvP'}
 						</button>
-						{#if !isMaker()}<p class="hint">Switch to <b>Maker</b> to create the trade.</p>{/if}
+						{#if !isMaker()}
+							<p class="hint">
+								You're acting as <b>{roleLabel(demo.activeRole)}</b>. Switch to
+								<button class="linkbtn" onclick={() => demo.setRole('maker')}>Maker</button> to set the terms.
+							</p>
+						{/if}
 					</div>
 				{:else}
 					<div class="ticket card">
@@ -393,21 +461,30 @@
 						: `${formatAmount(escrowBal, decimals, { compact: true })} / ${formatAmount(amount, decimals, { compact: true })}`}
 				</div>
 				<div class="leg-actions">
-					<button
-						class="btn btn-sm"
-						style={canFund ? `background:${color};color:#04120a;font-weight:600` : ''}
-						onclick={() => demo.fund(leg)}
-						disabled={!canFund || !!demo.busy}
-					>
-						Fund my leg
-					</button>
+					{#if canFund}
+						<button
+							class="btn btn-sm"
+							style="background:{color};color:#04120a;font-weight:600"
+							onclick={() => demo.fund(leg)}
+							disabled={!!demo.busy}
+						>
+							{demo.busy ?? `Fund my leg — send ${formatAmount(amount, decimals, { compact: true })} ${symbol}`}
+						</button>
+					{:else if open && !funded}
+						<button
+							class="btn btn-sm btn-ghost switch-hint"
+							title="You're acting as {roleLabel(demo.activeRole)}. Click to act as {roleLabel(
+								party
+							)} and fund this leg."
+							onclick={() => demo.setRole(party)}
+						>
+							Act as <b style="color:{color}">{roleLabel(party)}</b> to fund →
+						</button>
+					{/if}
 					{#if canReclaim}
 						<button class="btn btn-sm btn-ghost" onclick={() => demo.reclaimLeg(leg)} disabled={!!demo.busy}>Reclaim</button>
 					{/if}
 				</div>
-				{#if open && !funded && demo.activeRole !== party}
-					<p class="hint">Switch to <b style="color:{color}">{roleLabel(party)}</b> to fund.</p>
-				{/if}
 			</div>
 		</div>
 	</div>
@@ -438,19 +515,29 @@
 
 {#snippet settledBanner()}
 	<div class="settled {demo.trade?.closedBy}">
-		{#if demo.trade?.closedBy === 'settle'}
-			<span class="settled-icon">⇄</span>
-			<div>
+		<span class="settled-icon">{demo.trade?.closedBy === 'settle' ? '⇄' : '↩'}</span>
+		<div class="settled-body">
+			{#if demo.trade?.closedBy === 'settle'}
 				<b>Settled atomically.</b>
-				<span class="muted">Both legs crossed in a single transaction. Check the balances above.</span>
-			</div>
-		{:else}
-			<span class="settled-icon">↩</span>
-			<div>
+				<span class="muted">
+					Both legs crossed in a single transaction — see the updated balances above. The DvP account
+					and both escrow accounts were closed in the same transaction, and their rent (~0.01 SOL) went
+					to the Settlement Authority. The trade is complete; there's nothing left to do.
+				</span>
+			{:else}
 				<b>Trade {demo.trade?.closedBy === 'reject' ? 'rejected' : 'cancelled'}.</b>
-				<span class="muted">All funded legs were refunded to their depositors.</span>
+				<span class="muted">
+					Every funded leg was refunded to its depositor and all accounts were closed in one
+					transaction, with rent returned to the {demo.trade?.closedBy === 'reject'
+						? 'party who rejected'
+						: 'authority'}. Nothing is left on-chain.
+				</span>
+			{/if}
+			<div class="settled-actions">
+				<button class="btn btn-sm btn-primary" onclick={() => demo.newTrade()}>Start a new trade</button>
+				<button class="btn btn-sm btn-ghost" onclick={() => demo.reset()}>Reset with fresh wallets</button>
 			</div>
-		{/if}
+		</div>
 	</div>
 {/snippet}
 
@@ -630,6 +717,124 @@
 		font-size: 0.85rem;
 		color: var(--text-faint);
 		margin: 0;
+	}
+	.linkbtn {
+		background: none;
+		border: none;
+		color: var(--green);
+		cursor: pointer;
+		padding: 0;
+		font: inherit;
+		text-decoration: underline;
+	}
+	.tip {
+		color: var(--text-faint);
+		font-size: 0.88rem;
+	}
+	.form {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1rem 1.2rem;
+		width: 100%;
+	}
+	.form label {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+	.field {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.15rem 0.7rem;
+	}
+	.field:focus-within {
+		border-color: var(--border-strong);
+	}
+	.field input {
+		flex: 1;
+		min-width: 0;
+		background: none;
+		border: none;
+		outline: none;
+		color: var(--text);
+		font-family: var(--font-mono);
+		font-size: 1.1rem;
+		padding: 0.55rem 0;
+	}
+	.field input:disabled {
+		color: var(--text-muted);
+	}
+	.suffix {
+		font-family: var(--font-mono);
+		font-size: 0.85rem;
+		color: var(--text-muted);
+	}
+	.sub {
+		font-size: 0.78rem;
+	}
+	.switch-hint {
+		border-style: dashed;
+	}
+	.confidential {
+		grid-column: 1 / -1;
+		display: flex;
+		align-items: flex-start;
+		gap: 0.7rem;
+		padding: 0.9rem 1rem;
+		border: 1px dashed var(--border);
+		border-radius: var(--radius-sm);
+		opacity: 0.8;
+	}
+	.confidential .switch {
+		flex: none;
+		width: 34px;
+		height: 20px;
+		border-radius: 999px;
+		background: var(--surface-2);
+		border: 1px solid var(--border-strong);
+		position: relative;
+		margin-top: 2px;
+	}
+	.confidential .switch::after {
+		content: '';
+		position: absolute;
+		top: 2px;
+		left: 2px;
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: var(--text-faint);
+	}
+	.confidential-text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.soon {
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--amber);
+		border: 1px solid rgba(242, 180, 92, 0.4);
+		border-radius: 999px;
+		padding: 0.1rem 0.45rem;
+		margin-left: 0.35rem;
+		white-space: nowrap;
+	}
+	.settled-body {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+	}
+	.settled-actions {
+		display: flex;
+		gap: 0.6rem;
+		margin-top: 0.3rem;
 	}
 	.stepper {
 		display: flex;
@@ -951,7 +1156,8 @@
 		.roles,
 		.ticket-meta,
 		.balances,
-		.leg-main {
+		.leg-main,
+		.form {
 			grid-template-columns: 1fr;
 			flex-direction: column;
 		}
