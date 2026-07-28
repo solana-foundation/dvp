@@ -90,8 +90,9 @@
 			<div>
 				<b>Terms verified on-chain.</b>
 				<span class="muted"
-					>This escrow is a canonical account owned by the DvP program — the amounts and addresses
-					below are exactly what's recorded on Solana.</span
+					>The amounts below are exactly what's recorded on Solana. Send each token to the DvP account
+					— the same address for both legs — as an ordinary transfer; your wallet or custody system
+					routes it to the trade's escrow automatically.</span
 				>
 			</div>
 		</div>
@@ -107,16 +108,18 @@
 					<span class="sym">{leg.token.symbol}</span>
 				</div>
 				<div class="send">
-					<span class="eyebrow">Send this amount to</span>
+					<span class="eyebrow">Send this {leg.token.symbol} to (the DvP account)</span>
 					<div class="send-row">
-						<code class="mono">{leg.escrow}</code>
-						<button class="btn btn-sm" onclick={() => copy(leg.escrow)}>
-							{copied === leg.escrow ? 'Copied' : 'Copy'}
+						<code class="mono">{dvpAddr}</code>
+						<button class="btn btn-sm" onclick={() => copy(dvpAddr)}>
+							{copied === dvpAddr ? 'Copied' : 'Copy'}
 						</button>
 					</div>
 					<p class="faint">
-						A normal {leg.token.symbol} transfer to this address — from any wallet, exchange, or custodian.
-						No integration with the DvP program required.
+						Enter this as the recipient of a normal {leg.token.symbol} transfer — from any wallet,
+						exchange, or custodian. It resolves to the trade's {leg.token.symbol} escrow token account
+						(<span class="mono">{shortAddress(leg.escrow, 4, 4)}</span>), which the program settles.
+						Nothing DvP-specific to integrate.
 					</p>
 				</div>
 			</div>

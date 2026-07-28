@@ -383,7 +383,7 @@
 			</div>
 			<div class="leg-fund">
 				<div class="escrow-line">
-					<span class="eyebrow">Escrow address</span>
+					<span class="eyebrow">Escrow token account</span>
 					{@render addrChip(escrowAddr)}
 				</div>
 				<div class="bar"><span style="width:{pct}%; background:{color}"></span></div>
