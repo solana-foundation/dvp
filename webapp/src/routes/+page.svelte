@@ -186,7 +186,7 @@
 			<div class="acting">
 				You are acting as
 				<b style="color:{roleColor[demo.activeRole]}">{roleLabel(demo.activeRole)}</b>
-				<span class="faint mono">· {demo.balances.sol[demo.activeRole].toFixed(3)} SOL</span>
+				<span class="faint">· fees sponsored by the treasury, so roles hold no SOL</span>
 				<span class="tip">— click a role above to act as someone else</span>
 			</div>
 

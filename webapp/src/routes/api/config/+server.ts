@@ -1,12 +1,13 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { PROGRAM_ID, CLUSTER, ASSET_TOKEN, CASH_TOKEN, PRESET } from '$lib/config';
-import { mintAddresses } from '$lib/server/solana';
+import { mintAddresses, treasuryAddress } from '$lib/server/solana';
 
 export const GET: RequestHandler = async () => {
 	let mints: { asset: string; cash: string } | null = null;
+	let treasury: string | null = null;
 	try {
-		mints = await mintAddresses();
+		[mints, treasury] = await Promise.all([mintAddresses(), treasuryAddress()]);
 	} catch {
 		mints = null;
 	}
@@ -14,6 +15,7 @@ export const GET: RequestHandler = async () => {
 		programId: PROGRAM_ID,
 		cluster: CLUSTER,
 		mints,
+		treasury,
 		tokens: { asset: ASSET_TOKEN, cash: CASH_TOKEN },
 		presets: {
 			amountA: PRESET.amountA.toString(),

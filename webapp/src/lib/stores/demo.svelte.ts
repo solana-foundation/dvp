@@ -18,6 +18,7 @@ import {
 	cancel,
 	reclaim,
 	readTradeState,
+	setSponsor,
 	type TradeTerms
 } from '$lib/solana/dvp';
 import type { DvpAddresses } from '$lib/solana/pdas';
@@ -131,6 +132,7 @@ class DemoStore {
 		const res = await fetch(`${base}/api/config`);
 		const cfg = await res.json();
 		this.mints = cfg.mints;
+		if (cfg.treasury) setSponsor(cfg.treasury);
 		this.ready = true;
 		setInterval(() => (this.now = Math.floor(Date.now() / 1000)), 1000);
 		await this.refresh();
@@ -180,7 +182,7 @@ class DemoStore {
 				expiryTimestamp: BigInt(Math.floor(Date.now() / 1000) + expirySeconds),
 				ref: (opts?.ref && opts.ref.trim()) || 'DEMO-' + nonce.toString().slice(-6)
 			};
-			const { signature, addresses } = await createDvp(this.rpcOrThrow(), this.signerFor('maker'), terms);
+			const { signature, addresses } = await createDvp(this.rpcOrThrow(), terms);
 			this.trade = { terms, addresses, createdAt: Date.now(), closedBy: null };
 			this.pushLog('Create DvP', signature);
 			await this.refresh();

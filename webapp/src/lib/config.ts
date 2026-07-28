@@ -58,16 +58,8 @@ export interface RoleMeta {
 }
 
 export const ROLES: RoleMeta[] = [
-	{ key: 'maker', label: 'Maker', blurb: 'Defines the trade and pays account rent' },
+	{ key: 'maker', label: 'Maker', blurb: 'Defines the trade' },
 	{ key: 'partyA', label: 'Party A · Seller', blurb: `Delivers the asset (${ASSET_TOKEN.symbol})` },
 	{ key: 'partyB', label: 'Party B · Buyer', blurb: `Delivers the cash (${CASH_TOKEN.symbol})` },
 	{ key: 'authority', label: 'Settlement Authority', blurb: 'The only party who can settle atomically' }
 ];
-
-/** SOL each role is topped up to on demo start (maker/authority pay more rent). */
-export const SOL_TOPUP: Record<RoleKey, number> = {
-	maker: 0.12,
-	partyA: 0.03,
-	partyB: 0.03,
-	authority: 0.06
-};

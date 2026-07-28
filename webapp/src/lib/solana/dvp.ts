@@ -1,18 +1,19 @@
 import {
 	pipe,
 	address,
+	createNoopSigner,
 	type Address,
 	type Rpc,
 	type SolanaRpcApi,
 	type TransactionSigner,
 	type Instruction,
 	createTransactionMessage,
-	setTransactionMessageFeePayerSigner,
+	setTransactionMessageFeePayer,
 	setTransactionMessageLifetimeUsingBlockhash,
 	appendTransactionMessageInstructions,
-	signTransactionMessageWithSigners,
-	getBase64EncodedWireTransaction,
-	getSignatureFromTransaction
+	partiallySignTransactionMessageWithSigners,
+	getTransactionEncoder,
+	getBase64Decoder
 } from '@solana/kit';
 import {
 	TOKEN_PROGRAM_ADDRESS,
@@ -20,6 +21,7 @@ import {
 	getTransferCheckedInstruction,
 	getCreateAssociatedTokenIdempotentInstruction
 } from '@solana-program/token';
+import { base } from '$app/paths';
 import {
 	getCreateDvpInstruction,
 	getSettleDvpInstruction,
@@ -30,11 +32,27 @@ import {
 } from '$lib/dvp';
 import { PROGRAM_ID } from '$lib/config';
 import { deriveDvpAddresses, type DvpAddresses } from './pdas';
-import { confirmSignature } from './rpc';
 
 const PROG = address(PROGRAM_ID);
 const TOKEN = TOKEN_PROGRAM_ADDRESS;
 const MEMO_PROGRAM = address('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
+
+/**
+ * The treasury sponsors every transaction (fee payer + rent payer), so role
+ * wallets need no SOL. Set once at init from /api/config.
+ */
+let sponsor: Address | null = null;
+let sponsorNoop: TransactionSigner | null = null;
+export function setSponsor(addr: string) {
+	sponsor = address(addr);
+	sponsorNoop = createNoopSigner(sponsor);
+}
+// A single cached instance: kit requires the same signer instance per address
+// within a transaction (e.g. settle creates several treasury-paid ATAs).
+function sponsorSigner(): TransactionSigner {
+	if (!sponsorNoop) throw new Error('Fee sponsor not set');
+	return sponsorNoop;
+}
 
 export interface TradeTerms {
 	settlementAuthority: Address;
@@ -56,14 +74,10 @@ async function ata(owner: Address, mint: Address): Promise<Address> {
 	return a;
 }
 
-function createIdempotentAta(
-	payer: TransactionSigner,
-	owner: Address,
-	mint: Address,
-	ataAddr: Address
-): Instruction {
+/** Rent for a created ATA is paid by the treasury sponsor. */
+function createIdempotentAta(owner: Address, mint: Address, ataAddr: Address): Instruction {
 	return getCreateAssociatedTokenIdempotentInstruction({
-		payer,
+		payer: sponsorSigner(),
 		owner,
 		mint,
 		ata: ataAddr,
@@ -71,37 +85,41 @@ function createIdempotentAta(
 	});
 }
 
-/** Assemble, sign (with all referenced signers), send, and confirm. Returns the signature. */
-async function sendIxs(
-	rpc: Rpc<SolanaRpcApi>,
-	feePayer: TransactionSigner,
-	ixs: Instruction[]
-): Promise<string> {
+/**
+ * Build the tx with the treasury as fee payer, sign the role's part in the
+ * browser, then relay to the server which adds the treasury signature and
+ * submits. Returns the confirmed signature.
+ */
+async function sendIxs(rpc: Rpc<SolanaRpcApi>, ixs: Instruction[]): Promise<string> {
+	if (!sponsor) throw new Error('Fee sponsor not set');
 	const { value: blockhash } = await rpc.getLatestBlockhash({ commitment: 'confirmed' }).send();
 	const message = pipe(
 		createTransactionMessage({ version: 0 }),
-		(m) => setTransactionMessageFeePayerSigner(feePayer, m),
+		(m) => setTransactionMessageFeePayer(sponsor!, m),
 		(m) => setTransactionMessageLifetimeUsingBlockhash(blockhash, m),
 		(m) => appendTransactionMessageInstructions(ixs, m)
 	);
-	const signed = await signTransactionMessageWithSigners(message);
-	const signature = getSignatureFromTransaction(signed);
-	const wire = getBase64EncodedWireTransaction(signed);
-	await rpc.sendTransaction(wire, { encoding: 'base64', preflightCommitment: 'confirmed' }).send();
-	await confirmSignature(rpc, signature);
-	return signature;
+	const partiallySigned = await partiallySignTransactionMessageWithSigners(message);
+	const wire = getBase64Decoder().decode(getTransactionEncoder().encode(partiallySigned));
+	const res = await fetch(`${base}/api/relay`, {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ tx: wire })
+	});
+	const body = await res.json();
+	if (!res.ok || body.error) throw new Error(body.error ?? 'Relay failed');
+	return body.signature as string;
 }
 
-/** CreateDvp: allocate the SwapDvp PDA + tombstone + both escrow ATAs. Paid by the maker. */
+/** CreateDvp: allocate the SwapDvp PDA + tombstone + both escrow ATAs. Rent paid by the treasury. */
 export async function createDvp(
 	rpc: Rpc<SolanaRpcApi>,
-	maker: TransactionSigner,
 	terms: TradeTerms
 ): Promise<{ signature: string; addresses: DvpAddresses }> {
 	const addresses = await deriveDvpAddresses({ ...terms, tokenProgram: TOKEN });
 	const ix = getCreateDvpInstruction(
 		{
-			payer: maker,
+			payer: sponsorSigner(),
 			swapDvp: addresses.swapDvp,
 			nonceTombstone: addresses.nonceTombstone,
 			settlementAuthority: terms.settlementAuthority,
@@ -124,14 +142,14 @@ export async function createDvp(
 		},
 		{ programAddress: PROG }
 	);
-	const signature = await sendIxs(rpc, maker, [ix]);
+	const signature = await sendIxs(rpc, [ix]);
 	return { signature, addresses };
 }
 
 /**
- * Fund a leg. This is the crux of the "no integration" story: a plain
- * TransferChecked from the party's token account to the escrow ATA. Any wallet,
- * exchange, or custodian can do this without knowing the DvP program exists.
+ * Fund a leg: a plain TransferChecked from the party's token account to the
+ * escrow ATA. The party signs (authorizes moving its tokens); the treasury pays
+ * the fee. Any wallet/exchange/custodian can do the equivalent transfer.
  */
 export async function fundLeg(
 	rpc: Rpc<SolanaRpcApi>,
@@ -147,28 +165,26 @@ export async function fundLeg(
 		amount: args.amount,
 		decimals: args.decimals
 	});
-	return sendIxs(rpc, party, [ix]);
+	return sendIxs(rpc, [ix]);
 }
 
-/** SettleDvp: atomic cross-transfer of both legs, then close. Paid by the authority. */
+/** SettleDvp: atomic cross-transfer of both legs, then close. Authority signs; treasury pays. */
 export async function settle(
 	rpc: Rpc<SolanaRpcApi>,
 	authority: TransactionSigner,
 	terms: TradeTerms,
 	addresses: DvpAddresses
 ): Promise<string> {
-	// Destinations default to the counterparties themselves in this demo.
 	const userADestB = await ata(terms.userA, terms.mintB); // cash → seller
 	const userBDestA = await ata(terms.userB, terms.mintA); // asset → buyer
 	const userAAtaA = await ata(terms.userA, terms.mintA); // asset surplus refund
 	const userBAtaB = await ata(terms.userB, terms.mintB); // cash surplus refund
 
 	const ixs: Instruction[] = [
-		// All four recipient ATAs must exist before settlement.
-		createIdempotentAta(authority, terms.userA, terms.mintB, userADestB),
-		createIdempotentAta(authority, terms.userB, terms.mintA, userBDestA),
-		createIdempotentAta(authority, terms.userA, terms.mintA, userAAtaA),
-		createIdempotentAta(authority, terms.userB, terms.mintB, userBAtaB),
+		createIdempotentAta(terms.userA, terms.mintB, userADestB),
+		createIdempotentAta(terms.userB, terms.mintA, userBDestA),
+		createIdempotentAta(terms.userA, terms.mintA, userAAtaA),
+		createIdempotentAta(terms.userB, terms.mintB, userBAtaB),
 		getSettleDvpInstruction(
 			{
 				settlementAuthority: authority,
@@ -189,7 +205,7 @@ export async function settle(
 			{ programAddress: PROG }
 		)
 	];
-	return sendIxs(rpc, authority, ixs);
+	return sendIxs(rpc, ixs);
 }
 
 /** ReclaimDvp: a party pulls its own leg back while the trade stays open. */
@@ -211,10 +227,9 @@ export async function reclaim(
 		},
 		{ programAddress: PROG }
 	);
-	return sendIxs(rpc, party, [ix]);
+	return sendIxs(rpc, [ix]);
 }
 
-/** RejectDvp (party) / CancelDvp (authority): refund both funded legs and close. */
 async function refundAndClose(
 	rpc: Rpc<SolanaRpcApi>,
 	signer: TransactionSigner,
@@ -241,7 +256,7 @@ async function refundAndClose(
 		kind === 'reject'
 			? getRejectDvpInstruction({ signer, ...common }, { programAddress: PROG })
 			: getCancelDvpInstruction({ settlementAuthority: signer, ...common }, { programAddress: PROG });
-	return sendIxs(rpc, signer, [ix]);
+	return sendIxs(rpc, [ix]);
 }
 
 export const reject = (
@@ -258,7 +273,6 @@ export const cancel = (
 	addresses: DvpAddresses
 ) => refundAndClose(rpc, authority, terms, addresses, 'cancel');
 
-/** Live trade state: whether the SwapDvp still exists and each escrow's balance. */
 export interface TradeState {
 	open: boolean;
 	escrowABalance: bigint;

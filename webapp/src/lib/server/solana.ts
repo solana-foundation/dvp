@@ -1,11 +1,14 @@
 /**
  * Server-only Solana helpers. Holds the demo treasury key and the keyed RPC.
- * The treasury funds the ephemeral role wallets and is mint authority for the
- * two demo tokens. Nothing here is ever exposed to the browser.
+ * The treasury is mint authority for the two demo tokens AND the fee payer /
+ * rent payer for every user transaction (via `relay`), so the ephemeral role
+ * wallets never need any SOL — they only sign to authorize their own action.
+ * Nothing here is ever exposed to the browser.
  */
 import {
 	createKeyPairSignerFromBytes,
 	createKeyPairSignerFromPrivateKeyBytes,
+	createKeyPairFromBytes,
 	address,
 	pipe,
 	createTransactionMessage,
@@ -13,7 +16,10 @@ import {
 	setTransactionMessageLifetimeUsingBlockhash,
 	appendTransactionMessageInstructions,
 	signTransactionMessageWithSigners,
+	signTransaction,
 	getBase64EncodedWireTransaction,
+	getBase64Encoder,
+	getTransactionDecoder,
 	getSignatureFromTransaction,
 	type Address,
 	type KeyPairSigner,
@@ -30,18 +36,18 @@ import {
 	findAssociatedTokenPda,
 	TOKEN_PROGRAM_ADDRESS
 } from '@solana-program/token';
-import { getCreateAccountInstruction, getTransferSolInstruction } from '@solana-program/system';
+import { getCreateAccountInstruction } from '@solana-program/system';
 import { env } from '$env/dynamic/private';
-import { ASSET_TOKEN, CASH_TOKEN, SOL_TOPUP, type RoleKey } from '$lib/config';
+import { ASSET_TOKEN, CASH_TOKEN } from '$lib/config';
 import { resilientRpc } from '$lib/solana/resilientRpc';
 
 const TOKEN = TOKEN_PROGRAM_ADDRESS;
 const START_ASSET = 250_00n; // 250 TBILL
 const START_CASH = 25_000_000_000n; // 25,000 dUSD
-const ROLE_KEYS: RoleKey[] = ['maker', 'partyA', 'partyB', 'authority'];
 
 let _secret: Uint8Array | null = null;
 let _treasury: Promise<KeyPairSigner> | null = null;
+let _treasuryKp: Promise<CryptoKeyPair> | null = null;
 
 function secretBytes(): Uint8Array {
 	if (!_secret) {
@@ -54,6 +60,15 @@ function secretBytes(): Uint8Array {
 function treasury(): Promise<KeyPairSigner> {
 	if (!_treasury) _treasury = createKeyPairSignerFromBytes(secretBytes());
 	return _treasury;
+}
+
+function treasuryKeyPair(): Promise<CryptoKeyPair> {
+	if (!_treasuryKp) _treasuryKp = createKeyPairFromBytes(secretBytes());
+	return _treasuryKp;
+}
+
+export async function treasuryAddress(): Promise<string> {
+	return (await treasury()).address;
 }
 
 export function serverRpc(): Rpc<SolanaRpcApi> {
@@ -94,6 +109,7 @@ async function confirm(rpc: Rpc<SolanaRpcApi>, sig: Signature): Promise<void> {
 	throw new Error(`Timed out confirming ${sig}`);
 }
 
+/** Build, sign (treasury fee payer), send, confirm — for treasury-only server txs. */
 async function send(
 	rpc: Rpc<SolanaRpcApi>,
 	feePayer: KeyPairSigner,
@@ -115,6 +131,27 @@ async function send(
 		})
 		.send();
 	await confirm(rpc, sig);
+}
+
+/**
+ * Fee sponsorship: take a client-built, role-signed transaction, add the
+ * treasury's fee-payer signature, submit and confirm it. The client sets the
+ * treasury as fee payer but can't sign for it; this fills that signature.
+ */
+export async function relay(wireBase64: string): Promise<string> {
+	const rpc = serverRpc();
+	const bytes = getBase64Encoder().encode(wireBase64);
+	const tx = getTransactionDecoder().decode(bytes);
+	const signed = await signTransaction([await treasuryKeyPair()], tx);
+	const sig = getSignatureFromTransaction(signed);
+	await rpc
+		.sendTransaction(getBase64EncodedWireTransaction(signed), {
+			encoding: 'base64',
+			preflightCommitment: 'confirmed'
+		})
+		.send();
+	await confirm(rpc, sig);
+	return sig;
 }
 
 async function ensureMint(
@@ -177,33 +214,21 @@ async function topUpToken(
 	return ixs;
 }
 
-/** Faucet: ensure mints, top up SOL for every role, mint starting tokens to A & B. */
-export async function fundRoles(
-	addresses: Record<RoleKey, string>
-): Promise<{ mints: { asset: string; cash: string } }> {
+/**
+ * Demo setup: ensure the mints exist and top up Party A's asset and Party B's
+ * cash. No SOL is sent — the treasury sponsors all transaction fees via `relay`.
+ */
+export async function fundRoles(addresses: {
+	partyA: string;
+	partyB: string;
+}): Promise<{ mints: { asset: string; cash: string } }> {
 	const rpc = serverRpc();
 	const t = await treasury();
 	const mints = await ensureMints(rpc);
-
-	// SOL top-ups (single transaction).
-	const solIxs: Instruction[] = [];
-	for (const role of ROLE_KEYS) {
-		const target = BigInt(Math.round(SOL_TOPUP[role] * 1e9));
-		const bal = (await rpc.getBalance(address(addresses[role])).send()).value;
-		if (bal < target) {
-			solIxs.push(
-				getTransferSolInstruction({ source: t, destination: address(addresses[role]), amount: target - bal })
-			);
-		}
-	}
-	if (solIxs.length) await send(rpc, t, solIxs);
-
-	// Token top-ups.
 	const tokenIxs = [
 		...(await topUpToken(rpc, t, address(addresses.partyA), address(mints.asset), START_ASSET)),
 		...(await topUpToken(rpc, t, address(addresses.partyB), address(mints.cash), START_CASH))
 	];
 	await send(rpc, t, tokenIxs);
-
 	return { mints };
 }
