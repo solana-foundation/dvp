@@ -186,7 +186,7 @@
 			<div class="acting">
 				You are acting as
 				<b style="color:{roleColor[demo.activeRole]}">{roleLabel(demo.activeRole)}</b>
-				<span class="faint">· fees sponsored by the treasury, so roles hold no SOL</span>
+				<span class="faint">· the treasury covers every transaction fee</span>
 				<span class="tip">— click a role above to act as someone else</span>
 			</div>
 
@@ -196,8 +196,8 @@
 					<p class="muted">
 						We'll spin up four demo wallets and mint the demo tokens:
 						<b style="color:var(--asset)">{ASSET_TOKEN.symbol}</b> to Party A and
-						<b style="color:var(--cash)">{CASH_TOKEN.symbol}</b> to Party B. The treasury sponsors every
-						transaction fee, so the wallets never need any SOL.
+						<b style="color:var(--cash)">{CASH_TOKEN.symbol}</b> to Party B. The treasury covers every
+						transaction fee for you.
 					</p>
 					<button class="btn btn-primary" onclick={() => demo.start()} disabled={!!demo.busy}>
 						{demo.busy ?? 'Start demo'}

@@ -16,12 +16,12 @@ Program: `dvp34bdbcEm4f4FCUjGV4mDAkDshaQR4LkK8fdcsyZq` (devnet).
   `@solana-program/token` / `@solana-program/system`.
 - App-managed role keypairs live in the browser (localStorage); each signs
   locally, so no wallet extension is needed.
-- The role wallets hold **no SOL**: the treasury sponsors every transaction. The
-  browser sets the treasury as fee payer and partial-signs the role's part, then
-  `/api/relay` adds the treasury signature and submits.
+- The treasury pays every transaction fee: the browser sets the treasury as fee
+  payer and partial-signs the role's part, then `/api/relay` adds the treasury
+  signature and submits.
 - The keyed RPC and the demo treasury key are **server-only**. The browser talks
   to Solana through the `/api/rpc` same-origin proxy; the faucet (`/api/fund`)
-  mints the demo tokens with the treasury key (no SOL is dripped).
+  mints the demo tokens with the treasury key.
 
 ## Architecture
 
