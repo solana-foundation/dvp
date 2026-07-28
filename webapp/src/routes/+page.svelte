@@ -194,9 +194,10 @@
 				<div class="start-card card">
 					<h2>Set the stage</h2>
 					<p class="muted">
-						We'll spin up four demo wallets, drip devnet SOL for fees, and mint the demo tokens:
+						We'll spin up four demo wallets and mint the demo tokens:
 						<b style="color:var(--asset)">{ASSET_TOKEN.symbol}</b> to Party A and
-						<b style="color:var(--cash)">{CASH_TOKEN.symbol}</b> to Party B.
+						<b style="color:var(--cash)">{CASH_TOKEN.symbol}</b> to Party B. The treasury sponsors every
+						transaction fee, so the wallets never need any SOL.
 					</p>
 					<button class="btn btn-primary" onclick={() => demo.start()} disabled={!!demo.busy}>
 						{demo.busy ?? 'Start demo'}
