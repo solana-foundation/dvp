@@ -604,7 +604,7 @@
 	}
 	.role-addr {
 		font-size: 0.75rem;
-		color: var(--text-faint);
+		color: var(--text-muted);
 	}
 	.acting {
 		margin: 0.9rem 0 1.3rem;

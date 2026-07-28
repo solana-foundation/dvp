@@ -87,6 +87,13 @@ a {
 	text-decoration: none;
 }
 
+/* Buttons don't inherit color/font by default — make them, so bare buttons
+   (role cards, chips) render in the page's text color instead of system black. */
+button {
+	color: inherit;
+	font-family: inherit;
+}
+
 h1,
 h2,
 h3 {
