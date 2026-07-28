@@ -358,17 +358,22 @@
 							<div class="action-primary">
 								<div>
 									<b>Both legs are funded.</b>
-									<span class="muted">The authority can now settle both sides atomically.</span>
+									<span class="muted">The Settlement Authority can now settle both sides atomically.</span>
 								</div>
-								<button
-									class="btn btn-primary"
-									onclick={() => demo.settleTrade()}
-									disabled={!!demo.busy || !isAuth}
-								>
-									{demo.busy ?? '⇄ Settle atomically'}
-								</button>
+								{#if isAuth}
+									<button class="btn btn-primary" onclick={() => demo.settleTrade()} disabled={!!demo.busy}>
+										{demo.busy ?? '⇄ Settle atomically'}
+									</button>
+								{:else}
+									<button
+										class="btn switch-auth"
+										title="You're acting as {roleLabel(demo.activeRole)}. Click to act as the Settlement Authority and settle."
+										onclick={() => demo.setRole('authority')}
+									>
+										Act as Settlement Authority to settle →
+									</button>
+								{/if}
 							</div>
-							{#if !isAuth}<p class="hint">Switch to <b>Settlement Authority</b> to settle.</p>{/if}
 						{:else}
 							<div class="action-primary">
 								<span class="muted">Fund each leg above by acting as that party — or abort:</span>
@@ -778,6 +783,14 @@
 	}
 	.switch-hint {
 		border-style: dashed;
+	}
+	.switch-auth {
+		border-color: var(--amber);
+		color: var(--amber);
+		border-style: dashed;
+	}
+	.switch-auth:hover {
+		background: rgba(242, 180, 92, 0.08);
 	}
 	.confidential {
 		grid-column: 1 / -1;
