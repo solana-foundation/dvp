@@ -189,5 +189,18 @@ await sendSponsored(
 
 const aCash = await bal(uaDestB), bAsset = await bal(ubDestA);
 console.log('\nRESULT: A received', aCash, 'dUSD; B received', bAsset, 'TBILL');
-if (aCash === amountB && bAsset === amountA) console.log('\n✅ SPONSORED SMOKE PASSED: legs crossed, roles paid 0 SOL');
-else throw new Error('❌ balances did not match');
+
+console.log('\n5) account cleanup after settle');
+const info = async (a: Address) => (await rpc.getAccountInfo(a, { encoding: 'base64' }).send()).value;
+const swapInfo = await info(swapDvp), eaInfo = await info(escrowA), ebInfo = await info(escrowB), tombInfo = await info(tombstone);
+console.log('  swapDvp     :', swapInfo ? `OPEN (${swapInfo.lamports} lamports)` : 'closed ✓');
+console.log('  escrow A    :', eaInfo ? 'OPEN' : 'closed ✓');
+console.log('  escrow B    :', ebInfo ? 'OPEN' : 'closed ✓');
+console.log('  tombstone   :', tombInfo ? `kept (owner ${tombInfo.owner.slice(0, 4)}…, permanent by design)` : 'MISSING');
+console.log('  A cash ATA  :', await bal(uaDestB), 'dUSD (kept: holds received cash)');
+console.log('  B asset ATA :', await bal(ubDestA), 'TBILL (kept: holds received asset)');
+
+const cleaned = !swapInfo && !eaInfo && !ebInfo;
+if (aCash === amountB && bAsset === amountA && cleaned && tombInfo)
+	console.log('\n✅ PASSED: legs crossed, roles paid 0 SOL, DvP + both escrows closed, tombstone retained');
+else throw new Error('❌ verification failed (balances or cleanup)');
