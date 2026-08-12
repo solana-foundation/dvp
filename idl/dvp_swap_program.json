@@ -1248,7 +1248,7 @@
     "kind": "programNode",
     "name": "dvpSwapProgram",
     "pdas": [],
-    "publicKey": "DzG1qJupt6Khm8s8jB3p93NkhPoiAg2M7vkEhkS15CtC",
+    "publicKey": "dvp34bdbcEm4f4FCUjGV4mDAkDshaQR4LkK8fdcsyZq",
     "version": "0.1.0"
   },
   "standard": "codama",
