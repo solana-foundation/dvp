@@ -66,11 +66,14 @@ fmt:
 	@cd tests/integration-tests && cargo clippy --all-targets -- -D warnings
 	pnpm format
 
-# Unit tests: program crate's #[cfg(test)] modules + JS client tests.
-unit-test:
+# Unit tests: program crate's #[cfg(test)] modules + Rust/JS client tests.
+# Depends on generate-clients because both client crates' generated code is
+# gitignored, so neither test suite compiles on a fresh clone without it.
+unit-test: generate-clients
 	@echo "Running unit tests for swap program..."
 	pnpm test:unit
 	@cd program && cargo test
+	@cd clients/rust && cargo test
 
 # Integration tests (litesvm-based).
 integration-test-no-build:
