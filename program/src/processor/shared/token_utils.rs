@@ -163,6 +163,11 @@ pub fn verify_ata_recipient_if_initialized(
 /// at the address before creation (the ATA program only tops up the rent
 /// shortfall). Native (WSOL) escrows are exempt: there, lamports above
 /// rent are the deposit itself, adopted as token balance by SyncNative.
+///
+/// The `.max(1)` matches `create_pda_account` and the ATA program. On a
+/// zero-rent runtime like Solana Private Channels, creation still leaves
+/// 1 lamport, so without the floor the program rejects the account it
+/// just created. Inert under real rent.
 #[inline(always)]
 pub fn verify_escrow_not_preloaded(info: &AccountView, rent: &Rent) -> ProgramResult {
     let (data_len, is_native) = {
@@ -181,7 +186,7 @@ pub fn verify_escrow_not_preloaded(info: &AccountView, rent: &Rent) -> ProgramRe
         return Ok(());
     }
     require!(
-        info.lamports() == rent.try_minimum_balance(data_len)?,
+        info.lamports() == rent.try_minimum_balance(data_len)?.max(1),
         DvpSwapProgramError::EscrowPreloadedWithLamports
     );
     Ok(())
