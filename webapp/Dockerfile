@@ -33,4 +33,8 @@ ENV NODE_ENV=production
 ENV PORT=8080
 EXPOSE 8080
 
+# Drop root: the oven/bun base image ships an unprivileged `bun` user, and the
+# app only needs read access to the copied files.
+USER bun
+
 CMD ["bun", "./build/index.js"]

@@ -20,13 +20,15 @@ import {
 	getBase64EncodedWireTransaction,
 	getBase64Encoder,
 	getTransactionDecoder,
+	getCompiledTransactionMessageDecoder,
 	getSignatureFromTransaction,
 	type Address,
 	type KeyPairSigner,
 	type Rpc,
 	type SolanaRpcApi,
 	type Instruction,
-	type Signature
+	type Signature,
+	type Transaction
 } from '@solana/kit';
 import {
 	getInitializeMint2Instruction,
@@ -34,11 +36,12 @@ import {
 	getMintToInstruction,
 	getCreateAssociatedTokenIdempotentInstruction,
 	findAssociatedTokenPda,
-	TOKEN_PROGRAM_ADDRESS
+	TOKEN_PROGRAM_ADDRESS,
+	ASSOCIATED_TOKEN_PROGRAM_ADDRESS
 } from '@solana-program/token';
 import { getCreateAccountInstruction } from '@solana-program/system';
 import { env } from '$env/dynamic/private';
-import { ASSET_TOKEN, CASH_TOKEN } from '$lib/config';
+import { ASSET_TOKEN, CASH_TOKEN, PROGRAM_ID } from '$lib/config';
 import { resilientRpc } from '$lib/solana/resilientRpc';
 
 const TOKEN = TOKEN_PROGRAM_ADDRESS;
@@ -133,6 +136,43 @@ async function send(
 	await confirm(rpc, sig);
 }
 
+/** Programs the demo client legitimately invokes in relayed transactions. */
+const RELAY_PROGRAMS = new Set<string>([
+	PROGRAM_ID,
+	TOKEN_PROGRAM_ADDRESS,
+	ASSOCIATED_TOKEN_PROGRAM_ADDRESS
+]);
+
+/**
+ * The treasury co-signs whatever it relays, so refuse anything the demo client
+ * would not build: the treasury must be the fee payer (that's the point of
+ * relaying), only the DvP / Token / ATA programs may be invoked (no System
+ * transfers out of the treasury), and the treasury may not appear inside a
+ * Token instruction — it is the mint authority, so a crafted MintTo or
+ * Transfer would otherwise spend with its signature.
+ */
+function assertRelayable(tx: Transaction, treasuryAddr: string): void {
+	const msg = getCompiledTransactionMessageDecoder().decode(tx.messageBytes);
+	if (msg.staticAccounts[0] !== treasuryAddr) {
+		throw new Error('Relay refused: treasury is not the fee payer');
+	}
+	const treasuryIndices = new Set(
+		msg.staticAccounts.flatMap((a, i) => (a === treasuryAddr ? [i] : []))
+	);
+	for (const ix of msg.instructions) {
+		const program = msg.staticAccounts[ix.programAddressIndex];
+		if (!program || !RELAY_PROGRAMS.has(program)) {
+			throw new Error(`Relay refused: program ${program ?? '<lookup table>'} is not allowed`);
+		}
+		if (
+			program === TOKEN_PROGRAM_ADDRESS &&
+			(ix.accountIndices ?? []).some((i) => treasuryIndices.has(i))
+		) {
+			throw new Error('Relay refused: treasury account inside a token instruction');
+		}
+	}
+}
+
 /**
  * Fee sponsorship: take a client-built, role-signed transaction, add the
  * treasury's fee-payer signature, submit and confirm it. The client sets the
@@ -142,6 +182,7 @@ export async function relay(wireBase64: string): Promise<string> {
 	const rpc = serverRpc();
 	const bytes = getBase64Encoder().encode(wireBase64);
 	const tx = getTransactionDecoder().decode(bytes);
+	assertRelayable(tx, (await treasury()).address);
 	const signed = await signTransaction([await treasuryKeyPair()], tx);
 	const sig = getSignatureFromTransaction(signed);
 	await rpc

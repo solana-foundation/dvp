@@ -227,7 +227,9 @@ export async function reclaim(
 		},
 		{ programAddress: PROG }
 	);
-	return sendIxs(rpc, [ix]);
+	// The refund destination may have been closed since funding; recreate it so
+	// the transfer can't fail, as the settlement path does.
+	return sendIxs(rpc, [createIdempotentAta(party.address, args.mint, signerDestAta), ix]);
 }
 
 async function refundAndClose(
@@ -256,7 +258,13 @@ async function refundAndClose(
 		kind === 'reject'
 			? getRejectDvpInstruction({ signer, ...common }, { programAddress: PROG })
 			: getCancelDvpInstruction({ settlementAuthority: signer, ...common }, { programAddress: PROG });
-	return sendIxs(rpc, [ix]);
+	// Refund destinations may have been closed since funding; recreate them so
+	// the transfers can't fail, as the settlement path does.
+	return sendIxs(rpc, [
+		createIdempotentAta(terms.userA, terms.mintA, userAAtaA),
+		createIdempotentAta(terms.userB, terms.mintB, userBAtaB),
+		ix
+	]);
 }
 
 export const reject = (
