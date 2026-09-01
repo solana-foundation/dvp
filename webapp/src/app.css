@@ -1,0 +1,252 @@
+/* ============================================================================
+   DvP demo — design system (payments.org house style, dark)
+   Fonts: Reckless (display serif), Diatype (body sans), mono for labels/numbers.
+   Drop real woff2s into static/fonts and the @font-face blocks below pick them
+   up; otherwise the fallbacks render a close approximation.
+   ============================================================================ */
+
+@font-face {
+	font-family: 'reckless Fallback';
+	src: local('Georgia');
+	ascent-override: 90%;
+	size-adjust: 105%;
+}
+@font-face {
+	font-family: 'diatype Fallback';
+	src: local('Inter'), local('Helvetica Neue'), local('Arial');
+}
+/* If you have the licensed fonts, uncomment and add the files:
+@font-face { font-family: 'reckless'; src: url('/fonts/reckless.woff2') format('woff2'); font-weight: 400 600; font-display: swap; }
+@font-face { font-family: 'diatype'; src: url('/fonts/diatype.woff2') format('woff2'); font-weight: 300 600; font-display: swap; }
+*/
+
+:root {
+	--font-reckless: 'reckless', 'reckless Fallback', ui-serif, Georgia, 'Times New Roman', serif;
+	--font-diatype: 'diatype', 'diatype Fallback', ui-sans-serif, system-ui, -apple-system,
+		'Segoe UI', Roboto, sans-serif;
+	--font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Menlo', monospace;
+
+	/* Surfaces */
+	--bg: #08080a;
+	--bg-2: #0d0d10;
+	--surface: #101014;
+	--surface-2: #16161c;
+	--border: rgba(255, 255, 255, 0.08);
+	--border-strong: rgba(255, 255, 255, 0.16);
+
+	/* Text */
+	--text: #f4f4f0;
+	--text-muted: #9a9aa4;
+	--text-faint: #63636d;
+
+	/* Accents */
+	--green: #38e08a;
+	--green-dim: rgba(56, 224, 138, 0.14);
+	--blue: #5b8cff;
+	--cyan: #35d6e6;
+	--purple: #b57bff;
+	--pink: #ff77c8;
+	--amber: #f2b45c;
+	--red: #ff6b6b;
+
+	/* Leg identity: asset = cyan/blue, cash = green */
+	--asset: #5bb8ff;
+	--asset-dim: rgba(91, 184, 255, 0.14);
+	--cash: var(--green);
+	--cash-dim: var(--green-dim);
+
+	--radius: 16px;
+	--radius-sm: 10px;
+	--radius-pill: 999px;
+	--maxw: 1120px;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	background: var(--bg);
+	color: var(--text);
+	font-family: var(--font-diatype);
+	font-size: 16px;
+	line-height: 1.5;
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+}
+
+body {
+	min-height: 100vh;
+}
+
+a {
+	color: inherit;
+	text-decoration: none;
+}
+
+/* Buttons don't inherit color/font and carry a system background by default —
+   reset all three so bare buttons (role cards, chips, pills) match the dark UI
+   instead of rendering system-black text on a light buttonface. */
+button {
+	color: inherit;
+	font-family: inherit;
+	background: none;
+	cursor: pointer;
+}
+
+h1,
+h2,
+h3 {
+	font-family: var(--font-reckless);
+	font-weight: 400;
+	letter-spacing: -0.01em;
+	line-height: 1.05;
+	margin: 0;
+}
+
+/* ---- utilities ---- */
+.eyebrow {
+	font-family: var(--font-mono);
+	font-size: 0.72rem;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.mono {
+	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
+}
+
+.muted {
+	color: var(--text-muted);
+}
+.faint {
+	color: var(--text-faint);
+}
+
+.card {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+}
+
+.pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.3rem 0.7rem;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-pill);
+	font-size: 0.8rem;
+	color: var(--text-muted);
+}
+
+.dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--text-faint);
+	flex: none;
+}
+.dot.live {
+	background: var(--green);
+	box-shadow: 0 0 0 3px var(--green-dim);
+}
+
+/* ---- buttons ---- */
+.btn {
+	font-family: var(--font-diatype);
+	font-size: 0.95rem;
+	font-weight: 500;
+	padding: 0.7rem 1.1rem;
+	border-radius: var(--radius-pill);
+	border: 1px solid transparent;
+	cursor: pointer;
+	transition:
+		transform 0.08s ease,
+		background 0.15s ease,
+		border-color 0.15s ease,
+		opacity 0.15s ease;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	color: var(--text);
+	background: var(--surface-2);
+	border-color: var(--border);
+}
+.btn:hover:not(:disabled) {
+	border-color: var(--border-strong);
+}
+.btn:active:not(:disabled) {
+	transform: translateY(1px);
+}
+.btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+.btn-primary {
+	background: var(--green);
+	color: #04120a;
+	font-weight: 600;
+	border-color: transparent;
+}
+.btn-primary:hover:not(:disabled) {
+	background: #4dee98;
+}
+.btn-ghost {
+	background: transparent;
+}
+.btn-sm {
+	font-size: 0.85rem;
+	padding: 0.45rem 0.8rem;
+}
+.btn-danger {
+	color: var(--red);
+	border-color: rgba(255, 107, 107, 0.3);
+	background: transparent;
+}
+.btn-danger:hover:not(:disabled) {
+	border-color: var(--red);
+}
+
+/* ---- numerals ---- */
+.num {
+	font-family: var(--font-reckless);
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.01em;
+}
+
+/* ---- scrollbars ---- */
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+::-webkit-scrollbar-thumb {
+	background: rgba(255, 255, 255, 0.1);
+	border-radius: 10px;
+}
+
+/* ---- focus ---- */
+:focus-visible {
+	outline: 2px solid var(--green);
+	outline-offset: 2px;
+}
+
+@keyframes fadeInUp {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+.fade-in {
+	animation: fadeInUp 0.3s ease both;
+}
