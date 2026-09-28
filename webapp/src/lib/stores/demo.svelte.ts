@@ -105,17 +105,23 @@ class DemoStore {
 		this.log = [{ id: this.logId++, label, signature, ts: Date.now() }, ...this.log];
 	}
 
+	/**
+	 * Run a user action behind the busy flag. The follow-up balance read is
+	 * deliberately outside it: the action is finished once its transaction
+	 * confirms, and busy disables every button, so waiting on a read here lets a
+	 * slow RPC hold the whole UI shut long after the work is done.
+	 */
 	private async run<T>(label: string, fn: () => Promise<T>): Promise<T | undefined> {
 		this.busy = label;
 		this.error = null;
 		try {
-			const out = await fn();
-			return out;
+			return await fn();
 		} catch (e) {
 			this.error = e instanceof Error ? e.message : String(e);
 			return undefined;
 		} finally {
 			this.busy = null;
+			void this.refresh();
 		}
 	}
 
@@ -154,7 +160,6 @@ class DemoStore {
 			const body = await res.json();
 			this.mints = body.mints;
 			this.started = true;
-			await this.refresh();
 		});
 	}
 
@@ -185,7 +190,6 @@ class DemoStore {
 			const { signature, addresses } = await createDvp(this.rpcOrThrow(), terms);
 			this.trade = { terms, addresses, createdAt: Date.now(), closedBy: null };
 			this.pushLog('Create DvP', signature);
-			await this.refresh();
 		});
 	}
 
@@ -211,7 +215,6 @@ class DemoStore {
 					: { mint: t.mintB, decimals: t.decimalsB, escrow: this.trade!.addresses.escrowB, amount: t.amountB }
 			);
 			this.pushLog(`Fund ${leg === 'A' ? ASSET_TOKEN.symbol : CASH_TOKEN.symbol} leg`, signature);
-			await this.refresh();
 		});
 	}
 
@@ -226,7 +229,6 @@ class DemoStore {
 			);
 			this.trade!.closedBy = 'settle';
 			this.pushLog('Settle (atomic swap)', signature);
-			await this.refresh();
 		});
 	}
 
@@ -241,7 +243,6 @@ class DemoStore {
 			);
 			this.trade!.closedBy = 'reject';
 			this.pushLog('Reject (refund all)', signature);
-			await this.refresh();
 		});
 	}
 
@@ -256,7 +257,6 @@ class DemoStore {
 			);
 			this.trade!.closedBy = 'cancel';
 			this.pushLog('Cancel (refund all)', signature);
-			await this.refresh();
 		});
 	}
 
@@ -270,7 +270,6 @@ class DemoStore {
 				escrow: leg === 'A' ? this.trade!.addresses.escrowA : this.trade!.addresses.escrowB
 			});
 			this.pushLog(`Reclaim ${leg === 'A' ? ASSET_TOKEN.symbol : CASH_TOKEN.symbol} leg`, signature);
-			await this.refresh();
 		});
 	}
 
@@ -283,6 +282,7 @@ class DemoStore {
 		location.reload();
 	}
 
+	/** Best-effort read of on-chain state. Never rejects: callers fire it unawaited. */
 	async refresh() {
 		if (!this.mints) return;
 		const rpc = this.rpcOrThrow();
@@ -292,7 +292,7 @@ class DemoStore {
 			this.holdings(rpc, address(this.addresses.partyA), asset, cash),
 			this.holdings(rpc, address(this.addresses.partyB), asset, cash),
 			this.solBalances(rpc),
-			this.trade ? readTradeState(rpc, this.trade.addresses) : Promise.resolve(null)
+			this.trade ? readTradeState(rpc, this.trade.addresses).catch(() => null) : Promise.resolve(null)
 		]);
 		this.balances = { partyA: pa, partyB: pb, sol };
 		if (tradeState) {

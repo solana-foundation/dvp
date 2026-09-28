@@ -1,14 +1,38 @@
-import { createSolanaRpc, type Rpc, type SolanaRpcApi, type Signature } from '@solana/kit';
+import {
+	createDefaultRpcTransport,
+	createSolanaRpcFromTransport,
+	type Rpc,
+	type RpcTransport,
+	type SolanaRpcApi,
+	type Signature
+} from '@solana/kit';
 import { base } from '$app/paths';
+
+/** The proxy spends at most 10s upstream, so give it a little room and no more. */
+const REQUEST_TIMEOUT_MS = 15_000;
 
 /**
  * Browser RPC. Every call is POSTed to our same-origin /api/rpc proxy, which
  * forwards to the keyed devnet endpoint server-side (the RPC key never reaches
  * the client). Confirmation is by polling — no websocket subscription needed.
+ *
+ * Every request carries a timeout: the proxy retries upstream itself, so a call
+ * that outlives this is wedged, and failing it keeps a stalled read from holding
+ * the UI's busy flag open.
  */
 export function makeRpc(): Rpc<SolanaRpcApi> {
 	const origin = typeof location !== 'undefined' ? location.origin : 'http://localhost';
-	return createSolanaRpc(new URL(`${base}/api/rpc`, origin).href);
+	const inner = createDefaultRpcTransport({
+		url: new URL(`${base}/api/rpc`, origin).href
+	});
+	const transport = ((config) => {
+		const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+		return inner({
+			...config,
+			signal: config.signal ? AbortSignal.any([config.signal, timeout]) : timeout
+		});
+	}) as RpcTransport;
+	return createSolanaRpcFromTransport(transport);
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
