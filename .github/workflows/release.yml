@@ -6,9 +6,11 @@
 #
 #   devnet:  deployer holds upgrade authority and upgrades the program directly.
 #   mainnet: CI only writes buffers and hands their authority to the Squads
-#            vault. A human then creates the Squads upgrade proposal from the
-#            buffers listed in the run summary. The CI keypair is fee payer and
-#            buffer writer only; it is never a Squads member.
+#            vault, then exports one combined Squads transaction (verify PDA +
+#            IDL metadata write + program upgrade). A human imports it into the
+#            Squads transaction builder, then approves and executes. The CI
+#            keypair is fee payer and buffer writer only; it is never a Squads
+#            member.
 name: Release
 
 on:
@@ -57,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -99,14 +101,14 @@ jobs:
         run: make generate-idl
 
       - name: Build verified program
-        uses: solana-foundation/github-actions/build-verified@4dcdecb13d956467088835b1c644b38e0ee1d5d9
+        uses: solana-foundation/github-actions/build-verified@e6ed2eb93c55eca911dbc711fb08683b42926a28
         with:
           program: ${{ env.PROGRAM }}
 
       - id: write-buffer
         if: inputs.network == 'devnet'
         name: Write program buffer
-        uses: solana-foundation/github-actions/write-program-buffer@4dcdecb13d956467088835b1c644b38e0ee1d5d9
+        uses: solana-foundation/github-actions/write-program-buffer@e6ed2eb93c55eca911dbc711fb08683b42926a28
         with:
           program: ${{ env.PROGRAM }}
           program-id: ${{ env.PROGRAM_ID }}
@@ -120,7 +122,7 @@ jobs:
       # ============================================
       - if: inputs.network == 'devnet'
         name: Upgrade program (devnet)
-        uses: solana-foundation/github-actions/program-upgrade@4dcdecb13d956467088835b1c644b38e0ee1d5d9
+        uses: solana-foundation/github-actions/program-upgrade@e6ed2eb93c55eca911dbc711fb08683b42926a28
         with:
           program: ${{ env.PROGRAM }}
           program-id: ${{ env.PROGRAM_ID }}
@@ -130,7 +132,7 @@ jobs:
 
       - if: inputs.network == 'devnet'
         name: Upload IDL via program-metadata (devnet)
-        uses: solana-foundation/github-actions/metadata-upload@4dcdecb13d956467088835b1c644b38e0ee1d5d9
+        uses: solana-foundation/github-actions/metadata-upload@e6ed2eb93c55eca911dbc711fb08683b42926a28
         with:
           program-id: ${{ env.PROGRAM_ID }}
           rpc-url: ${{ env.RPC_URL }}
@@ -142,9 +144,15 @@ jobs:
       # mainnet: prepare Squads-owned buffers
       # ============================================
       - if: inputs.network == 'mainnet'
+        name: Validate Squads config
+        run: |
+          : "${SQUADS_VAULT:?Set SQUADS_VAULT in Doppler prd_github}"
+          : "${SQUADS_MULTISIG:?Set SQUADS_MULTISIG in Doppler prd_github}"
+
+      - if: inputs.network == 'mainnet'
         id: prepare-squads-release
         name: Prepare Squads release buffers (mainnet)
-        uses: solana-foundation/github-actions/prepare-squads-release@4dcdecb13d956467088835b1c644b38e0ee1d5d9
+        uses: solana-foundation/github-actions/prepare-squads-release@e6ed2eb93c55eca911dbc711fb08683b42926a28
         with:
           program: ${{ env.PROGRAM }}
           program-id: ${{ env.PROGRAM_ID }}
@@ -157,7 +165,7 @@ jobs:
       - if: inputs.network == 'mainnet'
         id: export-verify-tx
         name: Export verify PDA transaction (mainnet)
-        uses: solana-foundation/github-actions/verify-build@4dcdecb13d956467088835b1c644b38e0ee1d5d9
+        uses: solana-foundation/github-actions/verify-build@e6ed2eb93c55eca911dbc711fb08683b42926a28
         with:
           program: ${{ env.PROGRAM }}
           program-id: ${{ env.PROGRAM_ID }}
@@ -170,23 +178,18 @@ jobs:
           vault-address: ${{ env.SQUADS_VAULT }}
 
       - if: inputs.network == 'mainnet'
-        id: export-metadata-tx
-        name: Export metadata write transaction (mainnet)
-        uses: solana-foundation/github-actions/metadata-upload@4dcdecb13d956467088835b1c644b38e0ee1d5d9
+        id: export-squads-tx
+        name: Export combined Squads transaction (mainnet)
+        uses: solana-foundation/squads-program-action@572754d0b2e582bfc6bf2339f15d6dd2b9588246 # v0.5.1
         with:
-          program-id: ${{ env.PROGRAM_ID }}
-          rpc-url: ${{ env.RPC_URL }}
+          rpc: ${{ env.RPC_URL }}
+          program: ${{ env.PROGRAM_ID }}
+          buffer: ${{ steps.prepare-squads-release.outputs.buffer }}
+          metadata-buffer: ${{ steps.prepare-squads-release.outputs.metadata-buffer }}
+          multisig: ${{ env.SQUADS_MULTISIG }}
           keypair: ${{ env.DEPLOYER_KEYPAIR }}
-          buffer: ${{ steps.prepare-squads-release.outputs.metadata-buffer }}
-          export: ${{ env.SQUADS_VAULT }}
-          priority-fees: ${{ inputs.priority-fee }}
-
-      - if: inputs.network == 'mainnet'
-        name: Confirm mainnet buffer handoff
-        run: |
-          : "${SQUADS_VAULT:?Set SQUADS_VAULT in Doppler prd_github}"
-          echo "Program buffer authority assigned to Squads vault: $SQUADS_VAULT"
-          echo "IDL metadata buffer authority assigned to Squads vault: $SQUADS_VAULT"
+          pda-tx: ${{ steps.export-verify-tx.outputs.pda_tx }}
+          export: 'true'
 
       - name: Cleanup keypair
         if: always()
@@ -202,15 +205,11 @@ jobs:
             echo "- Buffer: \`${{ steps['prepare-squads-release'].outputs.buffer }}\`" >> $GITHUB_STEP_SUMMARY
             echo "- IDL buffer: \`${{ steps['prepare-squads-release'].outputs['metadata-buffer'] }}\`" >> $GITHUB_STEP_SUMMARY
             echo "- Buffer authority: \`${{ env.SQUADS_VAULT }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "- Verify PDA transaction (base58, import into Squads):" >> $GITHUB_STEP_SUMMARY
+            echo "- Combined transaction (base58, verify PDA + IDL metadata write + program upgrade in one):" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "${{ steps['export-verify-tx'].outputs.pda_tx }}" >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps['export-squads-tx'].outputs.tx }}" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "- Metadata write transactions (base58, one per line, import into Squads):" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "${{ steps['export-metadata-tx'].outputs.tx }}" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "- **Action required**: create the Squads upgrade proposal using the listed buffers and imported transactions" >> $GITHUB_STEP_SUMMARY
+            echo "- **Action required**: import the combined transaction into the Squads transaction builder, then approve and execute" >> $GITHUB_STEP_SUMMARY
             echo "- CI keypair role: fee payer and buffer writer only; it does not need Squads membership" >> $GITHUB_STEP_SUMMARY
           else
             echo "- Buffer: \`${{ steps.write-buffer.outputs.buffer }}\`" >> $GITHUB_STEP_SUMMARY
