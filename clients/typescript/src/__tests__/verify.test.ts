@@ -104,7 +104,7 @@ describe("canonical derivation helpers (verify-before-fund)", () => {
   // Solana CLI, mirroring the on-chain seed order
   // [b"dvp", settlement_authority, user_a, user_b, mint_a, mint_b, nonce_le]:
   //
-  //   solana find-program-derived-address DzG1qJupt6Khm8s8jB3p93NkhPoiAg2M7vkEhkS15CtC \
+  //   solana find-program-derived-address dvp34bdbcEm4f4FCUjGV4mDAkDshaQR4LkK8fdcsyZq \
   //     string:dvp \
   //     hex:0505050505050505050505050505050505050505050505050505050505050505 \  (settlement_authority = addressOf(5))
   //     hex:0101010101010101010101010101010101010101010101010101010101010101 \  (user_a = addressOf(1))
@@ -113,7 +113,7 @@ describe("canonical derivation helpers (verify-before-fund)", () => {
   //     hex:0404040404040404040404040404040404040404040404040404040404040404 \  (mint_b = addressOf(4))
   //     u64le:42                                                                 (nonce)
   //
-  //   => 6uMoF2mAhQD9QTz3CmyvhwKzEumEgodECwTf44GoL9Ki
+  //   => 6KvFpfqQsn9n6i4TUYimENwimXvns9yq9k7L9V5VxESz
   it("derives the canonical SwapDvp PDA from agreed terms", async () => {
     const [address] = await findSwapDvpPda({
       settlementAuthority: addressOf(5),
@@ -123,7 +123,7 @@ describe("canonical derivation helpers (verify-before-fund)", () => {
       mintB: addressOf(4),
       nonce: 42n,
     });
-    expect(address).toBe("6uMoF2mAhQD9QTz3CmyvhwKzEumEgodECwTf44GoL9Ki");
+    expect(address).toBe("6KvFpfqQsn9n6i4TUYimENwimXvns9yq9k7L9V5VxESz");
   });
 
   // Escrow ATAs are canonical Associated Token Accounts of the SwapDvp PDA,
