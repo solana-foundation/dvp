@@ -6,6 +6,11 @@ SHELL := /usr/bin/env bash
 .PHONY: unit-test integration-test integration-test-no-build all-test
 .PHONY: unit-coverage coverage-html all-coverage verify-program-id
 
+# Pinned so local and CI builds match regardless of the installed Solana CLI's
+# default. v1.57 (CLI 4.3) pushes process_settle_dvp past the 4096-byte SBF
+# frame and fails to link smart-wallet-fixture (no __rdl_alloc_error_handler).
+SBF_TOOLS_VERSION ?= v1.52
+
 # Install JS deps (codama renderers, tsx, etc.)
 install:
 	pnpm install
@@ -17,7 +22,7 @@ install:
 # sbf target).
 build:
 	$(MAKE) generate-clients
-	cd program && cargo-build-sbf
+	cd program && cargo-build-sbf --tools-version $(SBF_TOOLS_VERSION)
 	$(MAKE) build-hook-fixture
 	$(MAKE) build-smart-wallet-fixture
 
@@ -41,13 +46,13 @@ verify-program-id:
 # end-to-end. The .so lands in the workspace target/deploy/ alongside
 # the swap program's .so.
 build-hook-fixture:
-	cd tests/transfer-hook-fixture && cargo-build-sbf
+	cd tests/transfer-hook-fixture && cargo-build-sbf --tools-version $(SBF_TOOLS_VERSION)
 
 # Build the smart-wallet fixture used by integration tests to model a
 # Squads-style vault party (signs via CPI). The .so lands in the
 # workspace target/deploy/ alongside the swap program's .so.
 build-smart-wallet-fixture:
-	cd tests/smart-wallet-fixture && cargo-build-sbf
+	cd tests/smart-wallet-fixture && cargo-build-sbf --tools-version $(SBF_TOOLS_VERSION)
 
 # Generate the Codama IDL from the program's annotations.
 generate-idl:
