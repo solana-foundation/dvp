@@ -266,7 +266,7 @@ mod tests {
         // The forgery: Borsh None is a lone `0` tag, 8 bytes short.
         let mut short = Vec::new();
         sample().serialize(&mut short).unwrap();
-        assert_eq!(short.len(), 450);
+        assert_eq!(short.len(), SWAP_DVP_ACCOUNT_LEN - 8);
         assert!(matches!(
             SwapDvp::try_from_bytes(&short),
             Err(SwapDvpVerifyError::WrongSize { .. })
@@ -286,7 +286,8 @@ mod tests {
     #[test]
     fn strict_try_from_bytes_rejects_invalid_option_tag() {
         let mut bytes = on_chain_bytes(&sample());
-        let tag_offset = 1 + 32 * 7 + 8 * 4 + 64 + 32 * 2;
+        // The option tag sits 9 bytes from the end: 1 tag + 8 payload.
+        let tag_offset = SWAP_DVP_ACCOUNT_LEN - 9;
         bytes[tag_offset] = 2;
         assert!(matches!(
             SwapDvp::try_from_bytes(&bytes),
