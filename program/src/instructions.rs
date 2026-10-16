@@ -17,11 +17,11 @@ use pinocchio::Address as Pubkey;
 /// program per leg (`token_program_a` / `token_program_b`), enabling
 /// cross-program swaps (e.g. legacy-SPL ↔ Token-2022). Each token
 /// program account must match the owner of its leg's mint. Mints
-/// carrying amount-mutating Token-2022 extensions (TransferFee,
-/// InterestBearing, ScaledUiAmount) are
-/// rejected at CreateDvp; later instructions do not re-check so that
-/// funds remain recoverable if a mint's extension parameters change
-/// post-Create.
+/// carrying TransferFee or NonTransferable are rejected at CreateDvp
+/// and re-checked at SettleDvp. InterestBearing and ScaledUiAmount only
+/// affect UI amounts; DvP terms and transfers use unchanged base units.
+/// Recovery instructions skip this check, but remain subject to the
+/// token program's transfer rules if a mint changes post-Create.
 ///
 /// TransferHook is supported: instructions that issue a `TransferChecked`
 /// CPI (Settle/Cancel/Reject/Reclaim) treat any accounts beyond their

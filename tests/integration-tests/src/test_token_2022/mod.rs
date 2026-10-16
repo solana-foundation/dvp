@@ -4,16 +4,14 @@
 //! - **Positive lifecycle** on Token-2022 mints with each *allowed*
 //!   amount-preserving extension applied to one leg in isolation
 //!   (Pausable, PermanentDelegate, TransferHook, ConfidentialTransfer,
-//!   plain T22 with no extensions). Both single-program-T22 and mixed
-//!   (legacy ↔ T22) topologies are exercised.
+//!   InterestBearing, ScaledUiAmount, plain T22 with no extensions). Both
+//!   single-program-T22 and mixed (legacy ↔ T22) topologies are exercised.
 //! - **CreateDvp negative** for every *blocked* extension on either leg
-//!   (TransferFeeConfig, InterestBearingConfig, ScaledUiAmount,
-//!   NonTransferable).
+//!   (TransferFeeConfig, NonTransferable).
 //! - **Owner mismatch**: legacy SPL mint paired with T22 token program.
 //! - **Post-Create extension activation**: a mint is swapped to a
-//!   blocked-extension layout *after* CreateDvp, and Settle/Reject must
-//!   still drain funds (the unwind paths intentionally skip the
-//!   extension check so funds can never get stranded).
+//!   blocked-extension layout *after* CreateDvp. Settle must reject it,
+//!   while Reject can refund the unaffected leg when the changed leg is empty.
 //! - **Post-Create cross-program recreation**: a mint is recreated under
 //!   the other token program after CreateDvp; Settle must reject it.
 
@@ -22,6 +20,14 @@ use dvp_swap_program_client::instructions::{
     SettleDvpBuilder,
 };
 use solana_sdk::{account::Account, pubkey::Pubkey, signature::Keypair, signature::Signer};
+use spl_token_2022::{
+    extension::{
+        interest_bearing_mint::{instruction::update_rate, InterestBearingConfig},
+        scaled_ui_amount::{instruction::update_multiplier, ScaledUiAmountConfig},
+        BaseStateWithExtensions, ExtensionType, StateWithExtensions,
+    },
+    state::Mint,
+};
 
 use crate::{
     state_utils::{
@@ -93,6 +99,108 @@ fn test_full_lifecycle_mixed_legacy_and_token_2022() {
 
     assert_eq!(get_token_balance(&context, &fixture.user_a_ata_b), AMOUNT_B);
     assert_eq!(get_token_balance(&context, &fixture.user_b_ata_a), AMOUNT_A);
+}
+
+/// UI conversion changes must not change deposits, delivery or surplus refunds.
+/// Exercise each extension on either leg, with both T22 and legacy counterparties.
+#[test]
+fn test_settle_with_ui_amount_extensions() {
+    for extension in [
+        ExtensionType::InterestBearingConfig,
+        ExtensionType::ScaledUiAmount,
+    ] {
+        for on_a in [true, false] {
+            for other_program in [TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID] {
+                let mut context = TestContext::new();
+                let (program_a, program_b) = if on_a {
+                    (TOKEN_2022_PROGRAM_ID, other_program)
+                } else {
+                    (other_program, TOKEN_2022_PROGRAM_ID)
+                };
+                let fixture = setup_dvp_with_programs(&mut context, 0, program_a, program_b);
+                let mint = if on_a { fixture.mint_a } else { fixture.mint_b };
+                let amount = if on_a { AMOUNT_A } else { AMOUNT_B };
+                let authority = fixture.settlement_authority.pubkey();
+                match extension {
+                    ExtensionType::InterestBearingConfig => {
+                        set_mint_2022_with_interest_bearing(&mut context, &mint, &authority);
+                    }
+                    ExtensionType::ScaledUiAmount => {
+                        set_mint_2022_with_scaled_ui_amount(&mut context, &mint, &authority);
+                    }
+                    _ => unreachable!(),
+                }
+                let ui_amount = |context: &TestContext| {
+                    let account = context.get_account(&mint).unwrap();
+                    let state = StateWithExtensions::<Mint>::unpack(&account.data).unwrap();
+                    match extension {
+                        ExtensionType::InterestBearingConfig => state
+                            .get_extension::<InterestBearingConfig>()
+                            .unwrap()
+                            .amount_to_ui_amount(amount, state.base.decimals, context.now())
+                            .unwrap(),
+                        ExtensionType::ScaledUiAmount => state
+                            .get_extension::<ScaledUiAmountConfig>()
+                            .unwrap()
+                            .amount_to_ui_amount(amount, state.base.decimals, context.now())
+                            .unwrap(),
+                        _ => unreachable!(),
+                    }
+                };
+                let ui_at_create = ui_amount(&context);
+                assert_create_dvp(&mut context, &fixture);
+                assert_fund_a_amount(&mut context, &fixture, AMOUNT_A + 123);
+                assert_fund_b_amount(&mut context, &fixture, AMOUNT_B + 456);
+
+                context.advance_clock(600);
+                let update = match extension {
+                    ExtensionType::InterestBearingConfig => {
+                        // Interest has accrued since Create; changing the rate is also allowed.
+                        assert_ne!(ui_at_create, ui_amount(&context));
+                        update_rate(&TOKEN_2022_PROGRAM_ID, &mint, &authority, &[], 5_000).unwrap()
+                    }
+                    ExtensionType::ScaledUiAmount => update_multiplier(
+                        &TOKEN_2022_PROGRAM_ID,
+                        &mint,
+                        &authority,
+                        &[],
+                        3.0,
+                        context.now(),
+                    )
+                    .unwrap(),
+                    _ => unreachable!(),
+                };
+                context
+                    .send(update, &[&fixture.settlement_authority])
+                    .unwrap();
+                context.advance_clock(600);
+                assert_ne!(ui_at_create, ui_amount(&context));
+                assert_eq!(
+                    get_token_balance(&context, &fixture.dvp_ata_a),
+                    AMOUNT_A + 123
+                );
+                assert_eq!(
+                    get_token_balance(&context, &fixture.dvp_ata_b),
+                    AMOUNT_B + 456
+                );
+
+                assert_settle_dvp(&mut context, &fixture);
+                assert_eq!(get_token_balance(&context, &fixture.user_a_ata_b), AMOUNT_B);
+                assert_eq!(get_token_balance(&context, &fixture.user_b_ata_a), AMOUNT_A);
+                assert_eq!(
+                    get_token_balance(&context, &fixture.user_a_ata_a),
+                    INITIAL_BALANCE - AMOUNT_A
+                );
+                assert_eq!(
+                    get_token_balance(&context, &fixture.user_b_ata_b),
+                    INITIAL_BALANCE - AMOUNT_B
+                );
+                assert!(context.get_account(&fixture.dvp_ata_a).is_none());
+                assert!(context.get_account(&fixture.dvp_ata_b).is_none());
+                assert!(context.get_account(&fixture.swap_dvp).is_none());
+            }
+        }
+    }
 }
 
 /// Allowed extension: PermanentDelegate on `mint_b`. Trade settles
@@ -286,63 +394,26 @@ fn test_create_rejects_transfer_fee_on_mint_b() {
     assert_program_error(context.send(ix, &[]), BLOCKED_MINT_EXTENSION);
 }
 
-#[test]
-fn test_create_rejects_interest_bearing_on_mint_a() {
-    let mut context = TestContext::new();
-    let fixture = setup_dvp_with_programs(
-        &mut context,
-        0,
-        TOKEN_2022_PROGRAM_ID,
-        TOKEN_2022_PROGRAM_ID,
-    );
-
-    set_mint_2022_with_interest_bearing(
-        &mut context,
-        &fixture.mint_a,
-        &fixture.settlement_authority.pubkey(),
-    );
-
-    let ix = build_create_dvp_ix(&context, &fixture);
-    assert_program_error(context.send(ix, &[]), BLOCKED_MINT_EXTENSION);
-}
-
-#[test]
-fn test_create_rejects_scaled_ui_amount_on_mint_b() {
-    let mut context = TestContext::new();
-    let fixture = setup_dvp_with_programs(
-        &mut context,
-        0,
-        TOKEN_2022_PROGRAM_ID,
-        TOKEN_2022_PROGRAM_ID,
-    );
-
-    set_mint_2022_with_scaled_ui_amount(
-        &mut context,
-        &fixture.mint_b,
-        &fixture.settlement_authority.pubkey(),
-    );
-
-    let ix = build_create_dvp_ix(&context, &fixture);
-    assert_program_error(context.send(ix, &[]), BLOCKED_MINT_EXTENSION);
-}
-
 /// `NonTransferable` permanently blocks transfers out of any escrow, so
 /// a balance reaching it could never be settled, refunded, or reclaimed.
 /// Create must reject the mint up front.
 #[test]
-fn test_create_rejects_non_transferable_on_mint_a() {
-    let mut context = TestContext::new();
-    let fixture = setup_dvp_with_programs(
-        &mut context,
-        0,
-        TOKEN_2022_PROGRAM_ID,
-        TOKEN_2022_PROGRAM_ID,
-    );
+fn test_create_rejects_non_transferable_on_either_mint() {
+    for on_a in [true, false] {
+        let mut context = TestContext::new();
+        let fixture = setup_dvp_with_programs(
+            &mut context,
+            0,
+            TOKEN_2022_PROGRAM_ID,
+            TOKEN_2022_PROGRAM_ID,
+        );
 
-    set_mint_2022_with_non_transferable(&mut context, &fixture.mint_a);
+        let mint = if on_a { fixture.mint_a } else { fixture.mint_b };
+        set_mint_2022_with_non_transferable(&mut context, &mint);
 
-    let ix = build_create_dvp_ix(&context, &fixture);
-    assert_program_error(context.send(ix, &[]), BLOCKED_MINT_EXTENSION);
+        let ix = build_create_dvp_ix(&context, &fixture);
+        assert_program_error(context.send(ix, &[]), BLOCKED_MINT_EXTENSION);
+    }
 }
 
 // ---------------------------------------------------------------------
@@ -392,71 +463,71 @@ fn test_create_rejects_mint_program_owner_mismatch_b() {
 // itself does no extension check.
 // ---------------------------------------------------------------------
 
-/// The exploit: a party leaves their own leg unfunded
-/// until the counterparty commits, then closes the zero-supply mint and
-/// recreates it at the same address with a deny-listed extension (e.g.
-/// TransferFee, which short-delivers the leg). Settle must re-validate
-/// and reject. This test uses `InterestBearingConfig` — also deny-listed,
-/// and hitting the identical `validate_mint_extensions` branch that
-/// short-circuits before any balance/ATA/fee logic, so it guards the
-/// whole deny-list (TransferFee included), not just one extension. The
-/// honest counterparty then recovers both legs via Reject, which stays
-/// tolerant.
+/// Settle must reject either blocked extension introduced after Create.
+/// Reject must still recover the unaffected deposit when the changed leg is empty.
 #[test]
 fn test_settle_rejects_post_create_blocked_extension() {
-    let mut context = TestContext::new();
-    let fixture = setup_dvp_with_programs(
-        &mut context,
-        0,
-        TOKEN_2022_PROGRAM_ID,
-        TOKEN_2022_PROGRAM_ID,
-    );
+    for non_transferable in [true, false] {
+        let mut context = TestContext::new();
+        let fixture = setup_dvp_with_programs(
+            &mut context,
+            0,
+            TOKEN_2022_PROGRAM_ID,
+            TOKEN_2022_PROGRAM_ID,
+        );
 
-    assert_create_dvp(&mut context, &fixture);
-    assert_fund_a(&mut context, &fixture);
-    assert_fund_b(&mut context, &fixture);
+        assert_create_dvp(&mut context, &fixture);
+        assert_fund_b(&mut context, &fixture);
 
-    // Swap mint_a in place to an InterestBearing-bearing T22 mint —
-    // deny-listed, so Settle re-validation must reject it.
-    set_mint_2022_with_interest_bearing(
-        &mut context,
-        &fixture.mint_a,
-        &fixture.settlement_authority.pubkey(),
-    );
+        // Model a post-Create recreation on the unfunded leg.
+        if non_transferable {
+            set_mint_2022_with_non_transferable(&mut context, &fixture.mint_a);
+        } else {
+            set_mint_2022_with_transfer_fee(
+                &mut context,
+                &fixture.mint_a,
+                &fixture.settlement_authority.pubkey(),
+                100,
+                10_000,
+            );
+        }
 
-    let settle_ix = SettleDvpBuilder::new()
-        .settlement_authority(fixture.settlement_authority.pubkey())
-        .swap_dvp(fixture.swap_dvp)
-        .mint_a(fixture.mint_a)
-        .mint_b(fixture.mint_b)
-        .dvp_ata_a(fixture.dvp_ata_a)
-        .dvp_ata_b(fixture.dvp_ata_b)
-        .user_a_destination_ata_b(fixture.user_a_ata_b)
-        .user_b_destination_ata_a(fixture.user_b_ata_a)
-        .user_a_ata_a(fixture.user_a_ata_a)
-        .user_b_ata_b(fixture.user_b_ata_b)
-        .token_program_a(fixture.token_program_a)
-        .token_program_b(fixture.token_program_b)
-        .memo_program(MEMO_PROGRAM_ID)
-        .leg_a_extras_count(0)
-        .instruction();
-    assert_program_error(
-        context.send(settle_ix, &[&fixture.settlement_authority]),
-        BLOCKED_MINT_EXTENSION,
-    );
+        let settle_ix = SettleDvpBuilder::new()
+            .settlement_authority(fixture.settlement_authority.pubkey())
+            .swap_dvp(fixture.swap_dvp)
+            .mint_a(fixture.mint_a)
+            .mint_b(fixture.mint_b)
+            .dvp_ata_a(fixture.dvp_ata_a)
+            .dvp_ata_b(fixture.dvp_ata_b)
+            .user_a_destination_ata_b(fixture.user_a_ata_b)
+            .user_b_destination_ata_a(fixture.user_b_ata_a)
+            .user_a_ata_a(fixture.user_a_ata_a)
+            .user_b_ata_b(fixture.user_b_ata_b)
+            .token_program_a(fixture.token_program_a)
+            .token_program_b(fixture.token_program_b)
+            .memo_program(MEMO_PROGRAM_ID)
+            .leg_a_extras_count(0)
+            .instruction();
+        assert_program_error(
+            context.send(settle_ix, &[&fixture.settlement_authority]),
+            BLOCKED_MINT_EXTENSION,
+        );
 
-    // Funds are not stranded: Reject recovers both legs (InterestBearing
-    // does not block transfers, and Reject skips the extension check).
-    assert_reject_dvp(&mut context, &fixture, &fixture.user_a);
-    assert_eq!(
-        get_token_balance(&context, &fixture.user_a_ata_a),
-        INITIAL_BALANCE
-    );
-    assert_eq!(
-        get_token_balance(&context, &fixture.user_b_ata_b),
-        INITIAL_BALANCE
-    );
-    assert!(context.get_account(&fixture.swap_dvp).is_none());
+        assert_eq!(get_token_balance(&context, &fixture.dvp_ata_b), AMOUNT_B);
+        assert_eq!(get_token_balance(&context, &fixture.user_a_ata_b), 0);
+        // Reject skips validation and refunds the unaffected leg. The changed
+        // leg is empty, so it needs no transfer under the new mint rules.
+        assert_reject_dvp(&mut context, &fixture, &fixture.user_a);
+        assert_eq!(
+            get_token_balance(&context, &fixture.user_a_ata_a),
+            INITIAL_BALANCE
+        );
+        assert_eq!(
+            get_token_balance(&context, &fixture.user_b_ata_b),
+            INITIAL_BALANCE
+        );
+        assert!(context.get_account(&fixture.swap_dvp).is_none());
+    }
 }
 
 /// Cross-program close-and-recreate: a zero-supply T22 mint is closed

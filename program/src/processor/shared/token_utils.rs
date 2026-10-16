@@ -16,8 +16,7 @@ use pinocchio_token_2022::{
     state::TokenAccount as Token2022Account, ID as TOKEN_2022_PROGRAM_ID,
 };
 use spl_token_2022::extension::{
-    interest_bearing_mint::InterestBearingConfig, memo_transfer::memo_required,
-    non_transferable::NonTransferable, scaled_ui_amount::ScaledUiAmountConfig,
+    memo_transfer::memo_required, non_transferable::NonTransferable,
     transfer_fee::TransferFeeConfig, BaseStateWithExtensions, StateWithExtensions,
 };
 use spl_token_2022::state::{Account as Token2022AccountState, Mint as Token2022MintState};
@@ -276,16 +275,15 @@ pub fn get_mint_authority(mint_info: &AccountView) -> Result<Option<Address>, Pr
 }
 
 /// Reject Token-2022 mints carrying either:
-/// - an amount-mutating extension that silently breaks the "escrow
-///   balance == sum of deposits" invariant (`TransferFee`,
-///   `InterestBearing`, `ScaledUiAmount`): the credited amount drifts
-///   from the debited amount, so the program would settle
-///   "successfully" while a leg comes up short; or
+/// - `TransferFee`, which deducts a fee from the transferred amount,
+///   so the recipient would receive less than the agreed base units; or
 /// - `NonTransferable`, which permanently blocks transfers out of the
 ///   escrow. Unlike everything else this never recovers — if a balance
 ///   reaches the escrow (e.g. the authority mints straight to it), no
 ///   settle/refund/reclaim can drain it, stranding both legs.
 ///
+/// `InterestBearing` and `ScaledUiAmount` only change UI conversions.
+/// Deposits, balances and DvP terms remain in unchanged base units.
 /// Everything else is allowed, including `Pausable`, `PermanentDelegate`,
 /// `DefaultAccountState`, `TransferHook`, `ConfidentialTransfer`, etc.
 /// `ConfidentialTransfer` on the mint doesn't force confidential
@@ -337,8 +335,6 @@ pub fn validate_mint_extensions(mint_info: &AccountView) -> ProgramResult {
         .map_err(|_| ProgramError::InvalidAccountData)?;
 
     if mint.get_extension::<TransferFeeConfig>().is_ok()
-        || mint.get_extension::<InterestBearingConfig>().is_ok()
-        || mint.get_extension::<ScaledUiAmountConfig>().is_ok()
         || mint.get_extension::<NonTransferable>().is_ok()
     {
         return Err(DvpSwapProgramError::BlockedMintExtension.into());

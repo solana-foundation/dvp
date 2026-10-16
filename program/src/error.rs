@@ -46,12 +46,9 @@ pub enum DvpSwapProgramError {
     #[error("DvP leg amounts must be non-zero")]
     ZeroAmount,
 
-    /// (10) Mint carries a Token-2022 extension the swap program refuses
-    /// to support (transfer fee, interest bearing, scaled UI amount,
-    /// non-transferable). A confidential transfer fee config is also
-    /// rejected, but only implicitly: it always co-occurs with a transfer
-    /// fee config, which the explicit check already blocks.
-    /// Checked only at CreateDvp.
+    /// (10) Mint carries TransferFee or NonTransferable.
+    /// Checked at CreateDvp and SettleDvp. Recovery instructions skip
+    /// this check but remain subject to the token program's transfer rules.
     #[error("Mint carries an unsupported Token-2022 extension")]
     BlockedMintExtension,
 
