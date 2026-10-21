@@ -25,7 +25,7 @@ use pinocchio::{
 use pinocchio_associated_token_account::instructions::CreateIdempotent as CreateAtaIdempotent;
 
 /// Max DvP lifetime (one year) as a duration from creation. Caps escrow rent lock-up.
-const MAX_DVP_DURATION_SECS: i64 = 365 * 24 * 60 * 60;
+pub(super) const MAX_DVP_DURATION_SECS: i64 = 365 * 24 * 60 * 60;
 
 /// Processes the CreateDvp instruction.
 ///
@@ -421,7 +421,7 @@ fn parse_instruction_data(data: &[u8]) -> Result<CreateDvpArgs, ProgramError> {
 /// a smart-wallet PDA signing via CPI. An account owned by another
 /// program (e.g. an SPL Token multisig) or an executable can never sign,
 /// so a late deposit to its leg would be unrecoverable.
-fn verify_party_signer_capable(info: &AccountView) -> Result<(), ProgramError> {
+pub(super) fn verify_party_signer_capable(info: &AccountView) -> Result<(), ProgramError> {
     require!(
         info.owned_by(&pinocchio_system::ID) && !info.executable(),
         DvpSwapProgramError::PartyNotSignerCapable

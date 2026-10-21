@@ -8,11 +8,10 @@ use dvp_swap_program_client::accounts::SwapDvp;
 use dvp_swap_program_client::verify::{
     decode_swap_dvp_account, find_swap_dvp_address, find_swap_dvp_escrow_ata, SWAP_DVP_ACCOUNT_LEN,
 };
-use solana_sdk::{
-    account::Account,
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-};
+use solana_account::Account;
+use solana_keypair::Keypair;
+use solana_pubkey::Pubkey;
+use solana_signer::Signer;
 
 use crate::state_utils::{assert_create_dvp, setup_dvp, AMOUNT_A, AMOUNT_B};
 use crate::utils::{dvp_ata, swap_dvp_pda, TestContext};
@@ -32,8 +31,8 @@ fn forged_swap_dvp_data(attacker: &Pubkey) -> Vec<u8> {
         mint_a: Pubkey::new_unique().to_bytes().into(),
         mint_b: Pubkey::new_unique().to_bytes().into(),
         settlement_authority: attacker.to_bytes().into(),
-        token_program_a: spl_token::ID.to_bytes().into(),
-        token_program_b: spl_token::ID.to_bytes().into(),
+        token_program_a: spl_token_interface::ID.to_bytes().into(),
+        token_program_b: spl_token_interface::ID.to_bytes().into(),
         amount_a: 1,
         amount_b: 1_000_000_000,
         expiry_timestamp: i64::MAX / 2,
@@ -53,17 +52,17 @@ fn forged_swap_dvp_data(attacker: &Pubkey) -> Vec<u8> {
 
 /// The exploit setup: a plain System-owned account at a keypair the
 /// attacker controls, filled with SwapDvp-looking bytes. The checked
-/// decoder must reject it (wrong owner), even though the legacy
-/// `from_bytes` happily parses the data.
+/// decoder must reject it (wrong owner). The generated `from_bytes` now
+/// rejects this short Borsh layout too, but it never checks the owner.
 #[test]
 fn checked_decode_rejects_system_owned_forgery() {
     let mut context = TestContext::new();
     let attacker = Keypair::new();
     let data = forged_swap_dvp_data(&attacker.pubkey());
 
-    // Legacy generated reader: decodes the forgery without complaint.
-    // This is the unsafe behavior integrators must not rely on.
-    assert!(SwapDvp::from_bytes(&data).is_ok());
+    // The generated reader accepts only the 458-byte layout, so it rejects
+    // this 450-byte forgery by size alone.
+    assert!(SwapDvp::from_bytes(&data).is_err());
 
     context
         .svm
@@ -144,7 +143,8 @@ fn checked_decode_accepts_real_dvp_and_derivations_match() {
     // stored terms for the funder to compare against the agreed deal.
     let account = context.get_account(&fixture.swap_dvp).unwrap();
     assert_eq!(account.data.len(), SWAP_DVP_ACCOUNT_LEN);
-    let dvp = decode_swap_dvp_account(&fixture.swap_dvp, &account).unwrap();
+    let decoded = decode_swap_dvp_account(&fixture.swap_dvp, &account).unwrap();
+    let dvp = decoded.base();
     assert_eq!(dvp.amount_a, AMOUNT_A);
     assert_eq!(dvp.amount_b, AMOUNT_B);
     assert_eq!(dvp.bump, bump);
@@ -170,4 +170,68 @@ fn checked_decode_rejects_account_at_wrong_address() {
         err.to_string().contains("address"),
         "expected address error, got: {err}"
     );
+}
+
+#[test]
+fn discovery_skips_system_created_program_owned_accounts() {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    use dvp_swap_program_client::{
+        programs::DVP_SWAP_PROGRAM_ID,
+        verify::{fetch_swap_dvp_accounts, CONFIDENTIAL_SWAP_DVP_ACCOUNT_LEN},
+    };
+    use solana_client::{rpc_client::RpcClient, rpc_request::RpcRequest};
+
+    let mut context = TestContext::new();
+    let fixture = setup_dvp(&mut context, 44);
+    assert_create_dvp(&mut context, &fixture);
+    let real = context.get_account(&fixture.swap_dvp).unwrap();
+    let rpc_account = |address: Pubkey, account: &Account| {
+        serde_json::json!({
+            "pubkey": address.to_string(),
+            "account": {"lamports": account.lamports, "owner": account.owner.to_string(),
+                "data": [STANDARD.encode(&account.data), "base64"],
+                "executable": false, "rentEpoch": 0, "space": account.data.len()}
+        })
+    };
+
+    // Anyone can allocate zero-filled DvP-owned accounts through System CreateAccount.
+    let mut responses = vec![];
+    for size in [SWAP_DVP_ACCOUNT_LEN, CONFIDENTIAL_SWAP_DVP_ACCOUNT_LEN] {
+        let fake = Keypair::new();
+        let ix = solana_system_interface::instruction::create_account(
+            &context.payer.pubkey(),
+            &fake.pubkey(),
+            context.svm.minimum_balance_for_rent_exemption(size),
+            size as u64,
+            &DVP_SWAP_PROGRAM_ID,
+        );
+        crate::confidential_utils::send_v1(&mut context, &[ix], &[&fake]).unwrap();
+        let account = context.get_account(&fake.pubkey()).unwrap();
+        assert_eq!(account.owner, DVP_SWAP_PROGRAM_ID);
+        assert!(account.data.iter().all(|byte| *byte == 0));
+        let mut accounts = vec![rpc_account(fake.pubkey(), &account)];
+        if size == SWAP_DVP_ACCOUNT_LEN {
+            accounts.push(rpc_account(fixture.swap_dvp, &real));
+        }
+        responses.push((RpcRequest::GetProgramAccounts, serde_json::json!(accounts)));
+    }
+
+    // Feed actual on-chain snapshots through the public RPC discovery API.
+    let rpc = RpcClient::new_mock_with_mocks_map("succeeds", responses.into_iter().collect());
+    let swaps = fetch_swap_dvp_accounts(&rpc).unwrap();
+    assert_eq!(swaps.len(), 1);
+    assert_eq!(swaps[0].0, fixture.swap_dvp);
+    assert_eq!(
+        swaps[0].1,
+        decode_swap_dvp_account(&fixture.swap_dvp, &real).unwrap()
+    );
+}
+
+#[test]
+fn discovery_preserves_rpc_errors() {
+    let rpc = solana_client::rpc_client::RpcClient::new_mock("fails");
+    let error = dvp_swap_program_client::verify::fetch_swap_dvp_accounts(&rpc).unwrap_err();
+    assert!(error
+        .downcast_ref::<solana_client::client_error::ClientError>()
+        .is_some());
 }

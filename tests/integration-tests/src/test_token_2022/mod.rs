@@ -21,7 +21,10 @@ use dvp_swap_program_client::instructions::{
     CancelDvpBuilder, CreateDvpBuilder, ReclaimDvpBuilder, RecoverDvpBuilder, RejectDvpBuilder,
     SettleDvpBuilder,
 };
-use solana_sdk::{account::Account, pubkey::Pubkey, signature::Keypair, signature::Signer};
+use solana_account::Account;
+use solana_keypair::Keypair;
+use solana_pubkey::Pubkey;
+use solana_signer::Signer;
 
 use crate::{
     state_utils::{
@@ -220,7 +223,7 @@ fn test_create_accepts_transfer_hook_on_mint_a() {
 fn build_create_dvp_ix(
     context: &TestContext,
     fixture: &crate::state_utils::DvpFixture,
-) -> solana_sdk::instruction::Instruction {
+) -> solana_instruction::Instruction {
     CreateDvpBuilder::new()
         .payer(context.payer.pubkey())
         .swap_dvp(fixture.swap_dvp)
@@ -459,12 +462,10 @@ fn test_settle_rejects_post_create_blocked_extension() {
     assert!(context.get_account(&fixture.swap_dvp).is_none());
 }
 
-/// Cross-program close-and-recreate: a zero-supply T22 mint is closed
-/// and recreated at the same address as a legacy SPL mint, and
-/// counterfeit tokens are minted into the existing T22 escrow. Settle
-/// rebinds each mint to the token program captured at Create, rejecting
-/// the swapped leg. Reject skips the rebind so the honest party can
-/// still unwind.
+/// Inject cross-program mint recreation and an escrow balance. Settle
+/// rejects the owner mismatch. Reject also fails because the pinned
+/// Token-2022 binary checks the mint owner during TransferChecked;
+/// both escrows and the live DvP must remain unchanged.
 #[test]
 fn test_settle_rejects_mint_recreated_under_other_token_program() {
     let mut context = TestContext::new();
@@ -480,10 +481,8 @@ fn test_settle_rejects_mint_recreated_under_other_token_program() {
     // counterfeit below.
     assert_fund_b(&mut context, &fixture);
 
-    // Recreate mint_a under legacy SPL Token and mint the leg amount
-    // straight into the existing Token-2022 escrow. The escrow stays
-    // T22-owned: a legacy MintTo bumps its amount without requiring the
-    // destination to be owned by legacy SPL.
+    // Inject adversarial state directly. This does not establish that
+    // these mutations can be achieved through real token instructions.
     set_mint(&mut context, &fixture.mint_a, &TOKEN_PROGRAM_ID);
     set_token_balance(
         &mut context,
@@ -515,14 +514,106 @@ fn test_settle_rejects_mint_recreated_under_other_token_program() {
         "InvalidAccountOwner",
     );
 
-    // The honest party's funds are not stranded: Reject drains both
-    // escrows and closes the DvP.
+    let addresses = [
+        fixture.swap_dvp,
+        fixture.dvp_ata_a,
+        fixture.dvp_ata_b,
+        fixture.user_a_ata_a,
+        fixture.user_b_ata_b,
+    ];
+    let before = addresses.map(|address| context.get_account(&address).unwrap());
+    let reject_ix = RejectDvpBuilder::new()
+        .signer(fixture.user_b.pubkey())
+        .swap_dvp(fixture.swap_dvp)
+        .mint_a(fixture.mint_a)
+        .mint_b(fixture.mint_b)
+        .dvp_ata_a(fixture.dvp_ata_a)
+        .dvp_ata_b(fixture.dvp_ata_b)
+        .user_a_ata_a(fixture.user_a_ata_a)
+        .user_b_ata_b(fixture.user_b_ata_b)
+        .token_program_a(fixture.token_program_a)
+        .token_program_b(fixture.token_program_b)
+        .memo_program(MEMO_PROGRAM_ID)
+        .leg_a_extras_count(0)
+        .instruction();
+    assert_instruction_error(
+        context.send(reject_ix, &[&fixture.user_b]),
+        "IncorrectProgramId",
+    );
+    for (address, account) in addresses.into_iter().zip(before) {
+        assert_eq!(context.get_account(&address).unwrap(), account);
+    }
+}
+
+/// Models mint recreation with no tokens left in the old leg A accounts.
+/// Unlike the injected non-zero escrow case above, no transfer of A is needed.
+fn setup_dvp_with_empty_recreated_mint_a(
+    context: &mut TestContext,
+) -> crate::state_utils::DvpFixture {
+    let fixture = setup_dvp_with_programs(context, 0, TOKEN_2022_PROGRAM_ID, TOKEN_2022_PROGRAM_ID);
+    set_token_balance(
+        context,
+        &fixture.user_a_ata_a,
+        &fixture.mint_a,
+        &fixture.user_a.pubkey(),
+        0,
+        &TOKEN_2022_PROGRAM_ID,
+    );
+    assert_create_dvp(context, &fixture);
+    assert_fund_b(context, &fixture);
+
+    // Model the recreated mint directly; token balances in the old ATAs stay zero.
+    set_mint(context, &fixture.mint_a, &TOKEN_PROGRAM_ID);
+    assert_eq!(get_token_balance(context, &fixture.dvp_ata_a), 0);
+    fixture
+}
+
+/// Reject skips the empty leg A transfer, refunds B and closes both escrows.
+#[test]
+fn test_reject_recovers_leg_b_when_empty_leg_a_mint_recreated() {
+    let mut context = TestContext::new();
+    let fixture = setup_dvp_with_empty_recreated_mint_a(&mut context);
+
     assert_reject_dvp(&mut context, &fixture, &fixture.user_b);
+
+    assert_eq!(get_token_balance(&context, &fixture.user_a_ata_a), 0);
     assert_eq!(
         get_token_balance(&context, &fixture.user_b_ata_b),
         INITIAL_BALANCE
     );
     assert!(context.get_account(&fixture.swap_dvp).is_none());
+    assert!(context.get_account(&fixture.dvp_ata_a).is_none());
+    assert!(context.get_account(&fixture.dvp_ata_b).is_none());
+}
+
+/// Reclaim of B does not read the recreated mint A and leaves the trade open.
+#[test]
+fn test_reclaim_recovers_leg_b_when_empty_leg_a_mint_recreated() {
+    let mut context = TestContext::new();
+    let fixture = setup_dvp_with_empty_recreated_mint_a(&mut context);
+    let swap_before = context.get_account(&fixture.swap_dvp).unwrap();
+    let escrow_a_before = context.get_account(&fixture.dvp_ata_a).unwrap();
+    let ix = ReclaimDvpBuilder::new()
+        .signer(fixture.user_b.pubkey())
+        .swap_dvp(fixture.swap_dvp)
+        .mint(fixture.mint_b)
+        .dvp_source_ata(fixture.dvp_ata_b)
+        .signer_dest_ata(fixture.user_b_ata_b)
+        .token_program(fixture.token_program_b)
+        .memo_program(MEMO_PROGRAM_ID)
+        .instruction();
+    context.send(ix, &[&fixture.user_b]).expect("ReclaimDvp");
+
+    assert_eq!(
+        get_token_balance(&context, &fixture.user_b_ata_b),
+        INITIAL_BALANCE
+    );
+    assert_eq!(get_token_balance(&context, &fixture.dvp_ata_b), 0);
+    assert_eq!(context.get_account(&fixture.swap_dvp).unwrap(), swap_before);
+    assert_eq!(
+        context.get_account(&fixture.dvp_ata_a).unwrap(),
+        escrow_a_before
+    );
 }
 
 /// A leg with no mint authority at Create can't be recreated with one and
@@ -791,7 +882,7 @@ fn setup_hook_on_mint_a(context: &mut TestContext, fixture: &crate::state_utils:
 /// path needs the same extras the swap program forwards on settle.
 fn fund_a_with_hook(context: &mut TestContext, fixture: &crate::state_utils::DvpFixture) {
     let extras = hook_extras_for_mint(&fixture.mint_a);
-    let mut ix = spl_token_2022::instruction::transfer_checked(
+    let mut ix = spl_token_2022_interface::instruction::transfer_checked(
         &TOKEN_2022_PROGRAM_ID,
         &fixture.user_a_ata_a,
         &fixture.mint_a,
@@ -1183,7 +1274,7 @@ fn test_reclaim_rejects_signer_bearing_hook_extra() {
 /// Recreate the escrow ATA for the (now closed) SwapDvp wallet so a late
 /// deposit can land in it, as the funding-race attack does.
 fn recreate_dead_escrow_a(context: &mut TestContext, fixture: &crate::state_utils::DvpFixture) {
-    let ix = spl_associated_token_account::instruction::create_associated_token_account(
+    let ix = spl_associated_token_account_interface::instruction::create_associated_token_account(
         &context.payer.pubkey(),
         &fixture.swap_dvp,
         &fixture.mint_a,
@@ -1293,7 +1384,7 @@ fn test_settle_with_hook_and_surplus_on_mint_a() {
     // Over-fund leg A by `surplus`; leg B funded exactly.
     let surplus = 1_234u64;
     let extras = hook_extras_for_mint(&fixture.mint_a);
-    let mut fund_ix = spl_token_2022::instruction::transfer_checked(
+    let mut fund_ix = spl_token_2022_interface::instruction::transfer_checked(
         &TOKEN_2022_PROGRAM_ID,
         &fixture.user_a_ata_a,
         &fixture.mint_a,
@@ -1388,7 +1479,7 @@ fn test_settle_with_hooks_on_both_legs() {
 
     // Fund B by raw transfer_checked + hook extras for mint_b.
     let extras_b = hook_extras_for_mint(&fixture.mint_b);
-    let mut fund_b_ix = spl_token_2022::instruction::transfer_checked(
+    let mut fund_b_ix = spl_token_2022_interface::instruction::transfer_checked(
         &TOKEN_2022_PROGRAM_ID,
         &fixture.user_b_ata_b,
         &fixture.mint_b,
@@ -1477,7 +1568,7 @@ fn test_settle_rejects_extras_count_overrun() {
 // other leg.
 
 /// Overwrite `mint` as an empty System-owned account (a closed mint).
-fn close_mint(context: &mut TestContext, mint: &solana_sdk::pubkey::Pubkey) {
+fn close_mint(context: &mut TestContext, mint: &solana_pubkey::Pubkey) {
     context
         .svm
         .set_account(
@@ -1485,7 +1576,7 @@ fn close_mint(context: &mut TestContext, mint: &solana_sdk::pubkey::Pubkey) {
             Account {
                 lamports: 1,
                 data: vec![],
-                owner: solana_sdk::system_program::ID,
+                owner: solana_sdk_ids::system_program::ID,
                 executable: false,
                 rent_epoch: 0,
             },

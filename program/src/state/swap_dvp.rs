@@ -1,5 +1,6 @@
 extern crate alloc;
 
+use crate::error::DvpSwapProgramError;
 use alloc::vec::Vec;
 use codama::CodamaAccount;
 use pinocchio::{cpi::Seed, error::ProgramError, Address as Pubkey};
@@ -80,6 +81,12 @@ impl SwapDvp {
         + 32 * 2               // mint_a_authority, mint_b_authority
         + 1 + 8; // earliest_settlement_timestamp (opt)
 
+    /// Public instructions accept only the original, fixed-size layout.
+    pub fn load(data: &[u8]) -> Result<Self, ProgramError> {
+        check_layout_len(data.len(), Self::LEN)?;
+        Self::decode_base(data)
+    }
+
     /// Owned `(nonce, bump)` byte buffers. Bind to a local so
     /// `signing_seeds` can borrow from them across the CPI.
     pub fn seed_buffers(&self) -> ([u8; 8], [u8; 1]) {
@@ -138,8 +145,8 @@ impl SwapDvp {
         data
     }
 
-    pub fn try_from_bytes(data: &[u8]) -> Result<Self, ProgramError> {
-        if data.len() < Self::LEN {
+    fn decode_base(data: &[u8]) -> Result<Self, ProgramError> {
+        if data.len() != Self::LEN {
             return Err(ProgramError::InvalidAccountData);
         }
 
@@ -293,17 +300,53 @@ impl SwapDvp {
     }
 }
 
+/// Program-side view only: the IDL continues to describe the public base.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ConfidentialSwapDvp {
+    pub base: SwapDvp,
+    pub amount_b_ciphertext_lo: [u8; 64],
+    pub amount_b_ciphertext_hi: [u8; 64],
+}
+
+impl ConfidentialSwapDvp {
+    pub const LEN: usize = SwapDvp::LEN + 128;
+
+    /// The confidential tail follows the complete fixed-width public base.
+    pub fn load(data: &[u8]) -> Result<Self, ProgramError> {
+        check_layout_len(data.len(), Self::LEN)?;
+        Ok(Self {
+            base: SwapDvp::decode_base(&data[..SwapDvp::LEN])?,
+            amount_b_ciphertext_lo: data[SwapDvp::LEN..SwapDvp::LEN + 64].try_into().unwrap(),
+            amount_b_ciphertext_hi: data[SwapDvp::LEN + 64..].try_into().unwrap(),
+        })
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut base = self.base.clone();
+        base.amount_b = u64::MAX;
+        let mut data = base.to_bytes();
+        data.extend_from_slice(&self.amount_b_ciphertext_lo);
+        data.extend_from_slice(&self.amount_b_ciphertext_hi);
+        data
+    }
+}
+
+fn check_layout_len(actual: usize, expected: usize) -> Result<(), ProgramError> {
+    match actual {
+        len if len == expected => Ok(()),
+        SwapDvp::LEN | ConfidentialSwapDvp::LEN => {
+            Err(DvpSwapProgramError::SwapModeMismatch.into())
+        }
+        _ => Err(ProgramError::InvalidAccountData),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Three-arm match on the option tag: 0 → None, 1 → Some, anything
-    /// else → Err. The `_` arm is easy to drop in a refactor, and the
-    /// failure mode (silently reading garbage past the tag as a valid
-    /// `Some(_)`) is hard to spot in review.
-    #[test]
-    fn test_try_from_bytes_rejects_invalid_option_tag() {
-        let dvp = SwapDvp {
+    fn test_swap_dvp() -> SwapDvp {
+        SwapDvp {
             bump: 254,
             user_a: Pubkey::new_from_array([1u8; 32]),
             user_b: Pubkey::new_from_array([2u8; 32]),
@@ -322,42 +365,140 @@ mod tests {
             mint_a_authority: Pubkey::new_from_array([11u8; 32]),
             mint_b_authority: Pubkey::new_from_array([12u8; 32]),
             earliest_settlement_timestamp: None,
+        }
+    }
+
+    #[test]
+    fn test_fixed_layout_and_confidential_tail() {
+        // Pin the protocol sizes independently of the implementation constants.
+        assert_eq!(SwapDvp::LEN, 458);
+        assert_eq!(ConfidentialSwapDvp::LEN, 586);
+
+        for earliest in [None, Some(1_770_000_000i64)] {
+            let base = SwapDvp {
+                earliest_settlement_timestamp: earliest,
+                ..test_swap_dvp()
+            };
+            // Independent wire fixture in field order, without using to_bytes.
+            let bytes = [
+                &[254u8][..],                                // bump
+                &[1u8; 32],                                  // user_a
+                &[2u8; 32],                                  // user_b
+                &[3u8; 32],                                  // mint_a
+                &[4u8; 32],                                  // mint_b
+                &[5u8; 32],                                  // settlement_authority
+                &[6u8; 32],                                  // token_program_a
+                &[7u8; 32],                                  // token_program_b
+                &1_000u64.to_le_bytes(),                     // amount_a
+                &2_500u64.to_le_bytes(),                     // amount_b
+                &1_780_000_000i64.to_le_bytes(),             // expiry_timestamp
+                &42u64.to_le_bytes(),                        // nonce
+                &[8u8; 64],                                  // ref_string
+                &[9u8; 32],                                  // user_a_settlement_destination
+                &[10u8; 32],                                 // user_b_settlement_destination
+                &[11u8; 32],                                 // mint_a_authority
+                &[12u8; 32],                                 // mint_b_authority
+                &[u8::from(earliest.is_some())],             // earliest option tag
+                &earliest.unwrap_or(i64::MAX).to_le_bytes(), // earliest value/sentinel
+            ]
+            .concat();
+            assert_eq!(SwapDvp::load(&bytes).unwrap(), base);
+            assert_eq!(base.to_bytes(), bytes);
+
+            let confidential = ConfidentialSwapDvp {
+                base,
+                amount_b_ciphertext_lo: [13u8; 64],
+                amount_b_ciphertext_hi: [14u8; 64],
+            };
+            // amount_b follows bump, seven pubkeys and amount_a.
+            let amount_b_offset = 1 + 32 * 7 + 8;
+            let amount_b_end = amount_b_offset + core::mem::size_of::<u64>();
+            let mut expected_base = bytes.clone();
+            expected_base[amount_b_offset..amount_b_end].copy_from_slice(&u64::MAX.to_le_bytes());
+
+            // Independent confidential fixture: base with sentinel, then both ciphertexts.
+            let confidential_bytes = [
+                expected_base.as_slice(), // base with amount_b = u64::MAX
+                &[13u8; 64],              // amount_b_ciphertext_lo
+                &[14u8; 64],              // amount_b_ciphertext_hi
+            ]
+            .concat();
+            assert_eq!(confidential_bytes.len(), ConfidentialSwapDvp::LEN);
+            assert_eq!(confidential.to_bytes(), confidential_bytes);
+
+            let decoded = ConfidentialSwapDvp::load(&confidential_bytes).unwrap();
+            let mut expected = confidential;
+            expected.base.amount_b = u64::MAX;
+            assert_eq!(decoded, expected);
+            assert_eq!(decoded.to_bytes(), confidential_bytes);
+            assert_eq!(
+                SwapDvp::load(&confidential_bytes),
+                Err(DvpSwapProgramError::SwapModeMismatch.into())
+            );
+            assert_eq!(
+                ConfidentialSwapDvp::load(&bytes),
+                Err(DvpSwapProgramError::SwapModeMismatch.into())
+            );
+        }
+    }
+
+    #[test]
+    fn test_loaders_reject_other_lengths_and_invalid_tags() {
+        // Cover every truncated layout and the first oversized confidential layout.
+        for len in 0..=ConfidentialSwapDvp::LEN + 1 {
+            if matches!(len, SwapDvp::LEN | ConfidentialSwapDvp::LEN) {
+                continue;
+            }
+            let bytes = alloc::vec![0; len];
+            assert_eq!(SwapDvp::load(&bytes), Err(ProgramError::InvalidAccountData));
+            assert_eq!(
+                ConfidentialSwapDvp::load(&bytes),
+                Err(ProgramError::InvalidAccountData)
+            );
+        }
+
+        let confidential = ConfidentialSwapDvp {
+            base: test_swap_dvp(),
+            amount_b_ciphertext_lo: [13u8; 64],
+            amount_b_ciphertext_hi: [14u8; 64],
         };
+        let mut bytes = confidential.to_bytes();
+        // The public base ends with an option tag followed by an i64 payload.
+        let option_tag_offset = SwapDvp::LEN - 1 - core::mem::size_of::<i64>();
+        bytes[option_tag_offset] = 2;
+        assert_eq!(
+            SwapDvp::load(&bytes[..SwapDvp::LEN]),
+            Err(ProgramError::InvalidAccountData)
+        );
+        assert_eq!(
+            ConfidentialSwapDvp::load(&bytes),
+            Err(ProgramError::InvalidAccountData)
+        );
+    }
+
+    /// Three-arm match on the option tag: 0 → None, 1 → Some, anything
+    /// else → Err. The `_` arm is easy to drop in a refactor, and the
+    /// failure mode (silently reading garbage past the tag as a valid
+    /// `Some(_)`) is hard to spot in review.
+    #[test]
+    fn test_load_rejects_invalid_option_tag() {
+        let dvp = test_swap_dvp();
         let mut bytes = dvp.to_bytes();
         // Tag offset = bump(1) + 7*pubkey(224) + 4*u64-or-i64(32)
         //   + ref_string(64) + 2*destination pubkey(64)
         //   + 2*authority pubkey(64) = 449.
         let option_tag_offset = 1 + 32 * 7 + 8 * 4 + MAX_REF_STRING_LEN + 32 * 2 + 32 * 2;
         bytes[option_tag_offset] = 2;
-        let err = SwapDvp::try_from_bytes(&bytes).expect_err("must reject invalid tag");
+        let err = SwapDvp::load(&bytes).expect_err("must reject invalid tag");
         assert!(matches!(err, ProgramError::InvalidAccountData));
     }
 
-    /// to_bytes -> try_from_bytes round-trips across the earliest-option
+    /// to_bytes -> load round-trips across the earliest-option
     /// None/Some cases and present/absent (default) mint authorities, where
     /// the layout could drift.
     #[test]
-    fn test_to_bytes_try_from_bytes_roundtrip() {
-        let base = SwapDvp {
-            bump: 254,
-            user_a: Pubkey::new_from_array([1u8; 32]),
-            user_b: Pubkey::new_from_array([2u8; 32]),
-            mint_a: Pubkey::new_from_array([3u8; 32]),
-            mint_b: Pubkey::new_from_array([4u8; 32]),
-            settlement_authority: Pubkey::new_from_array([5u8; 32]),
-            token_program_a: Pubkey::new_from_array([6u8; 32]),
-            token_program_b: Pubkey::new_from_array([7u8; 32]),
-            amount_a: 1_000,
-            amount_b: 2_500,
-            expiry_timestamp: 1_780_000_000,
-            nonce: 42,
-            ref_string: [8u8; 64],
-            user_a_settlement_destination: Pubkey::new_from_array([9u8; 32]),
-            user_b_settlement_destination: Pubkey::new_from_array([10u8; 32]),
-            mint_a_authority: Pubkey::default(),
-            mint_b_authority: Pubkey::default(),
-            earliest_settlement_timestamp: None,
-        };
+    fn test_to_bytes_load_roundtrip() {
+        let base = test_swap_dvp();
 
         let key = Pubkey::new_from_array([11u8; 32]);
         let default = Pubkey::default();
@@ -377,7 +518,7 @@ mod tests {
             };
             let bytes = dvp.to_bytes();
             assert_eq!(bytes.len(), SwapDvp::LEN);
-            assert_eq!(SwapDvp::try_from_bytes(&bytes).unwrap(), dvp);
+            assert_eq!(SwapDvp::load(&bytes).unwrap(), dvp);
         }
     }
 }

@@ -168,7 +168,109 @@
         "name": "swapDvp"
       }
     ],
-    "definedTypes": [],
+    "definedTypes": [
+      {
+        "kind": "definedTypeNode",
+        "name": "ctTransferData",
+        "type": {
+          "fields": [
+            {
+              "kind": "structFieldTypeNode",
+              "name": "newSourceDecryptableAvailableBalance",
+              "type": {
+                "count": {
+                  "kind": "fixedCountNode",
+                  "value": 36
+                },
+                "item": {
+                  "endian": "le",
+                  "format": "u8",
+                  "kind": "numberTypeNode"
+                },
+                "kind": "arrayTypeNode"
+              }
+            },
+            {
+              "kind": "structFieldTypeNode",
+              "name": "auditorCiphertextLo",
+              "type": {
+                "count": {
+                  "kind": "fixedCountNode",
+                  "value": 64
+                },
+                "item": {
+                  "endian": "le",
+                  "format": "u8",
+                  "kind": "numberTypeNode"
+                },
+                "kind": "arrayTypeNode"
+              }
+            },
+            {
+              "kind": "structFieldTypeNode",
+              "name": "auditorCiphertextHi",
+              "type": {
+                "count": {
+                  "kind": "fixedCountNode",
+                  "value": 64
+                },
+                "item": {
+                  "endian": "le",
+                  "format": "u8",
+                  "kind": "numberTypeNode"
+                },
+                "kind": "arrayTypeNode"
+              }
+            }
+          ],
+          "kind": "structTypeNode"
+        }
+      },
+      {
+        "kind": "definedTypeNode",
+        "name": "legBRefund",
+        "type": {
+          "kind": "enumTypeNode",
+          "size": {
+            "endian": "le",
+            "format": "u8",
+            "kind": "numberTypeNode"
+          },
+          "variants": [
+            {
+              "kind": "enumEmptyVariantTypeNode",
+              "name": "none"
+            },
+            {
+              "kind": "enumTupleVariantTypeNode",
+              "name": "full",
+              "tuple": {
+                "items": [
+                  {
+                    "kind": "definedTypeLinkNode",
+                    "name": "ctTransferData"
+                  }
+                ],
+                "kind": "tupleTypeNode"
+              }
+            },
+            {
+              "kind": "enumTupleVariantTypeNode",
+              "name": "partial",
+              "tuple": {
+                "items": [
+                  {
+                    "kind": "definedTypeLinkNode",
+                    "name": "ctTransferData"
+                  }
+                ],
+                "kind": "tupleTypeNode"
+              }
+            }
+          ]
+        }
+      }
+    ],
     "errors": [
       {
         "code": 0,
@@ -313,20 +415,102 @@
         "kind": "errorNode",
         "message": "mint authority changed since DvP creation",
         "name": "mintAuthorityChanged"
+      },
+      {
+        "code": 24,
+        "kind": "errorNode",
+        "message": "Instruction does not match the swap mode",
+        "name": "swapModeMismatch"
+      },
+      {
+        "code": 25,
+        "kind": "errorNode",
+        "message": "Mint does not support confidential transfers",
+        "name": "mintNotConfidential"
+      },
+      {
+        "code": 26,
+        "kind": "errorNode",
+        "message": "Escrow public balance must be empty at creation",
+        "name": "escrowPublicBalanceNotEmpty"
+      },
+      {
+        "code": 27,
+        "kind": "errorNode",
+        "message": "Escrow does not have confidential transfer state",
+        "name": "escrowNotConfidential"
+      },
+      {
+        "code": 28,
+        "kind": "errorNode",
+        "message": "Proof context owner, length or type is invalid",
+        "name": "invalidProofContext"
+      },
+      {
+        "code": 29,
+        "kind": "errorNode",
+        "message": "Proof context authority does not match the signer",
+        "name": "proofContextAuthorityMismatch"
+      },
+      {
+        "code": 30,
+        "kind": "errorNode",
+        "message": "Confidential payment does not match the agreed amount",
+        "name": "confidentialAmountBMismatch"
+      },
+      {
+        "code": 31,
+        "kind": "errorNode",
+        "message": "Recipient does not have confidential transfer state",
+        "name": "recipientNotConfidential"
+      },
+      {
+        "code": 32,
+        "kind": "errorNode",
+        "message": "Recipient is not approved for confidential transfers",
+        "name": "recipientNotApproved"
+      },
+      {
+        "code": 33,
+        "kind": "errorNode",
+        "message": "Recipient does not accept confidential credits",
+        "name": "recipientConfidentialCreditsDisabled"
+      },
+      {
+        "code": 34,
+        "kind": "errorNode",
+        "message": "Recipient pending credit counter is full",
+        "name": "recipientPendingCounterFull"
+      },
+      {
+        "code": 35,
+        "kind": "errorNode",
+        "message": "Escrow available balance does not match the zero proof",
+        "name": "escrowBalanceNotZero"
+      },
+      {
+        "code": 36,
+        "kind": "errorNode",
+        "message": "A confidential refund is required for leg B",
+        "name": "legBRefundRequired"
       }
     ],
     "instructions": [
       {
         "accounts": [
           {
-            "docs": ["Funds account/ATA creation rent"],
+            "docs": [
+              "Funds account/ATA creation rent"
+            ],
             "isSigner": true,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "payer"
           },
           {
-            "docs": ["SwapDvp PDA to be created"],
+            "docs": [
+              "SwapDvp PDA to be created"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
@@ -369,56 +553,72 @@
             "name": "userB"
           },
           {
-            "docs": ["Mint of the asset leg (seller delivers)"],
+            "docs": [
+              "Mint of the asset leg (seller delivers)"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
             "name": "mintA"
           },
           {
-            "docs": ["Mint of the cash leg (buyer delivers)"],
+            "docs": [
+              "Mint of the cash leg (buyer delivers)"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
             "name": "mintB"
           },
           {
-            "docs": ["swap_dvp's ATA for mint_a (created here)"],
+            "docs": [
+              "swap_dvp's ATA for mint_a (created here)"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "dvpAtaA"
           },
           {
-            "docs": ["swap_dvp's ATA for mint_b (created here)"],
+            "docs": [
+              "swap_dvp's ATA for mint_b (created here)"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "dvpAtaB"
           },
           {
-            "docs": ["System program"],
+            "docs": [
+              "System program"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
             "name": "systemProgram"
           },
           {
-            "docs": ["SPL Token or Token-2022 program; must own mint_a"],
+            "docs": [
+              "SPL Token or Token-2022 program; must own mint_a"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
             "name": "tokenProgramA"
           },
           {
-            "docs": ["SPL Token or Token-2022 program; must own mint_b"],
+            "docs": [
+              "SPL Token or Token-2022 program; must own mint_b"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
             "name": "tokenProgramB"
           },
           {
-            "docs": ["Associated Token Account program"],
+            "docs": [
+              "Associated Token Account program"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
@@ -561,14 +761,18 @@
       {
         "accounts": [
           {
-            "docs": ["Depositor; must equal dvp.user_a or dvp.user_b"],
+            "docs": [
+              "Depositor; must equal dvp.user_a or dvp.user_b"
+            ],
             "isSigner": true,
             "isWritable": false,
             "kind": "instructionAccountNode",
             "name": "signer"
           },
           {
-            "docs": ["SwapDvp PDA (signs the transfer as authority)"],
+            "docs": [
+              "SwapDvp PDA (signs the transfer as authority)"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
@@ -584,21 +788,27 @@
             "name": "mint"
           },
           {
-            "docs": ["DvP's escrow ATA for the leg's mint"],
+            "docs": [
+              "DvP's escrow ATA for the leg's mint"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "dvpSourceAta"
           },
           {
-            "docs": ["Signer's canonical ATA for the leg's mint"],
+            "docs": [
+              "Signer's canonical ATA for the leg's mint"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "signerDestAta"
           },
           {
-            "docs": ["SPL Token or Token-2022 program; must own mint"],
+            "docs": [
+              "SPL Token or Token-2022 program; must own mint"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
@@ -652,35 +862,45 @@
             "name": "settlementAuthority"
           },
           {
-            "docs": ["SwapDvp PDA (signs CPIs, then closed)"],
+            "docs": [
+              "SwapDvp PDA (signs CPIs, then closed)"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "swapDvp"
           },
           {
-            "docs": ["Must equal dvp.mint_a"],
+            "docs": [
+              "Must equal dvp.mint_a"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
             "name": "mintA"
           },
           {
-            "docs": ["Must equal dvp.mint_b"],
+            "docs": [
+              "Must equal dvp.mint_b"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
             "name": "mintB"
           },
           {
-            "docs": ["Asset escrow (drained, then closed)"],
+            "docs": [
+              "Asset escrow (drained, then closed)"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "dvpAtaA"
           },
           {
-            "docs": ["Cash escrow (drained, then closed)"],
+            "docs": [
+              "Cash escrow (drained, then closed)"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
@@ -723,14 +943,18 @@
             "name": "userBAtaB"
           },
           {
-            "docs": ["SPL Token or Token-2022 program; must own mint_a"],
+            "docs": [
+              "SPL Token or Token-2022 program; must own mint_a"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
             "name": "tokenProgramA"
           },
           {
-            "docs": ["SPL Token or Token-2022 program; must own mint_b"],
+            "docs": [
+              "SPL Token or Token-2022 program; must own mint_b"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
@@ -793,63 +1017,81 @@
             "name": "settlementAuthority"
           },
           {
-            "docs": ["SwapDvp PDA (signs CPIs, then closed)"],
+            "docs": [
+              "SwapDvp PDA (signs CPIs, then closed)"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "swapDvp"
           },
           {
-            "docs": ["Must equal dvp.mint_a"],
+            "docs": [
+              "Must equal dvp.mint_a"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
             "name": "mintA"
           },
           {
-            "docs": ["Must equal dvp.mint_b"],
+            "docs": [
+              "Must equal dvp.mint_b"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
             "name": "mintB"
           },
           {
-            "docs": ["Asset escrow (drained if funded, then closed)"],
+            "docs": [
+              "Asset escrow (drained if funded, then closed)"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "dvpAtaA"
           },
           {
-            "docs": ["Cash escrow (drained if funded, then closed)"],
+            "docs": [
+              "Cash escrow (drained if funded, then closed)"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "dvpAtaB"
           },
           {
-            "docs": ["user_a's ATA for mint_a; refund destination"],
+            "docs": [
+              "user_a's ATA for mint_a; refund destination"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "userAAtaA"
           },
           {
-            "docs": ["user_b's ATA for mint_b; refund destination"],
+            "docs": [
+              "user_b's ATA for mint_b; refund destination"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "userBAtaB"
           },
           {
-            "docs": ["SPL Token or Token-2022 program; must own mint_a"],
+            "docs": [
+              "SPL Token or Token-2022 program; must own mint_a"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
             "name": "tokenProgramA"
           },
           {
-            "docs": ["SPL Token or Token-2022 program; must own mint_b"],
+            "docs": [
+              "SPL Token or Token-2022 program; must own mint_b"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
@@ -912,63 +1154,81 @@
             "name": "signer"
           },
           {
-            "docs": ["SwapDvp PDA (signs CPIs, then closed)"],
+            "docs": [
+              "SwapDvp PDA (signs CPIs, then closed)"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "swapDvp"
           },
           {
-            "docs": ["Must equal dvp.mint_a"],
+            "docs": [
+              "Must equal dvp.mint_a"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
             "name": "mintA"
           },
           {
-            "docs": ["Must equal dvp.mint_b"],
+            "docs": [
+              "Must equal dvp.mint_b"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
             "name": "mintB"
           },
           {
-            "docs": ["Asset escrow (drained if funded, then closed)"],
+            "docs": [
+              "Asset escrow (drained if funded, then closed)"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "dvpAtaA"
           },
           {
-            "docs": ["Cash escrow (drained if funded, then closed)"],
+            "docs": [
+              "Cash escrow (drained if funded, then closed)"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "dvpAtaB"
           },
           {
-            "docs": ["user_a's ATA for mint_a; refund destination"],
+            "docs": [
+              "user_a's ATA for mint_a; refund destination"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "userAAtaA"
           },
           {
-            "docs": ["user_b's ATA for mint_b; refund destination"],
+            "docs": [
+              "user_b's ATA for mint_b; refund destination"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
             "name": "userBAtaB"
           },
           {
-            "docs": ["SPL Token or Token-2022 program; must own mint_a"],
+            "docs": [
+              "SPL Token or Token-2022 program; must own mint_a"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
             "name": "tokenProgramA"
           },
           {
-            "docs": ["SPL Token or Token-2022 program; must own mint_b"],
+            "docs": [
+              "SPL Token or Token-2022 program; must own mint_b"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
@@ -1040,7 +1300,9 @@
             "name": "swapDvp"
           },
           {
-            "docs": ["Nonce tombstone PDA for swap_dvp; must be program-owned"],
+            "docs": [
+              "Nonce tombstone PDA for swap_dvp; must be program-owned"
+            ],
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
@@ -1065,7 +1327,9 @@
             "name": "dvpEscrowAta"
           },
           {
-            "docs": ["Signer's canonical ATA for the leg's mint"],
+            "docs": [
+              "Signer's canonical ATA for the leg's mint"
+            ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
@@ -1159,6 +1423,1479 @@
         ],
         "kind": "instructionNode",
         "name": "recoverDvp"
+      },
+      {
+        "accounts": [
+          {
+            "docs": [
+              "Funds account/ATA creation rent"
+            ],
+            "isSigner": true,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "payer"
+          },
+          {
+            "docs": [
+              "SwapDvp PDA to be created"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "swapDvp"
+          },
+          {
+            "docs": [
+              "Per-DvP nonce tombstone PDA, created here and never closed; rejects nonce reuse"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "nonceTombstone"
+          },
+          {
+            "docs": [
+              "Third-party authority allowed to settle/cancel; must not be executable so it can receive closed-account rent"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "settlementAuthority"
+          },
+          {
+            "docs": [
+              "Seller (delivers mint_a). Must be a system-owned, non-executable account so it can authorize Reject/Reclaim/Recover"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "userA"
+          },
+          {
+            "docs": [
+              "Buyer (delivers mint_b). Same signer-capability requirement as user_a"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "userB"
+          },
+          {
+            "docs": [
+              "Mint of the asset leg (seller delivers)"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "mintA"
+          },
+          {
+            "docs": [
+              "Token-2022 mint for leg B with ConfidentialTransferMint"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "mintB"
+          },
+          {
+            "docs": [
+              "swap_dvp's ATA for mint_a (created here)"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "dvpAtaA"
+          },
+          {
+            "docs": [
+              "swap_dvp's ATA for mint_b; created and configured for confidential transfers"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "dvpAtaB"
+          },
+          {
+            "docs": [
+              "System program"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "systemProgram"
+          },
+          {
+            "docs": [
+              "SPL Token or Token-2022 program; must own mint_a"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "tokenProgramA"
+          },
+          {
+            "docs": [
+              "Token-2022 program; must own mint_b"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "tokenProgramB"
+          },
+          {
+            "docs": [
+              "Associated Token Account program"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "associatedTokenProgram"
+          },
+          {
+            "docs": [
+              "Instructions sysvar used to locate the inline PubkeyValidity proof"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "instructionsSysvar"
+          }
+        ],
+        "arguments": [
+          {
+            "defaultValue": {
+              "kind": "numberValueNode",
+              "number": 6
+            },
+            "defaultValueStrategy": "omitted",
+            "kind": "instructionArgumentNode",
+            "name": "discriminator",
+            "type": {
+              "endian": "le",
+              "format": "u8",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "amountA",
+            "type": {
+              "endian": "le",
+              "format": "u64",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "expiryTimestamp",
+            "type": {
+              "endian": "le",
+              "format": "i64",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "nonce",
+            "type": {
+              "endian": "le",
+              "format": "u64",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "amountBCiphertextLo",
+            "type": {
+              "count": {
+                "kind": "fixedCountNode",
+                "value": 64
+              },
+              "item": {
+                "endian": "le",
+                "format": "u8",
+                "kind": "numberTypeNode"
+              },
+              "kind": "arrayTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "amountBCiphertextHi",
+            "type": {
+              "count": {
+                "kind": "fixedCountNode",
+                "value": 64
+              },
+              "item": {
+                "endian": "le",
+                "format": "u8",
+                "kind": "numberTypeNode"
+              },
+              "kind": "arrayTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "decryptableZeroBalance",
+            "type": {
+              "count": {
+                "kind": "fixedCountNode",
+                "value": 36
+              },
+              "item": {
+                "endian": "le",
+                "format": "u8",
+                "kind": "numberTypeNode"
+              },
+              "kind": "arrayTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "pubkeyValidityProofOffset",
+            "type": {
+              "endian": "le",
+              "format": "i8",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "refString",
+            "type": {
+              "item": {
+                "kind": "sizePrefixTypeNode",
+                "prefix": {
+                  "endian": "le",
+                  "format": "u32",
+                  "kind": "numberTypeNode"
+                },
+                "type": {
+                  "encoding": "utf8",
+                  "kind": "stringTypeNode"
+                }
+              },
+              "kind": "optionTypeNode",
+              "prefix": {
+                "endian": "le",
+                "format": "u8",
+                "kind": "numberTypeNode"
+              }
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "userASettlementDestination",
+            "type": {
+              "item": {
+                "kind": "publicKeyTypeNode"
+              },
+              "kind": "optionTypeNode",
+              "prefix": {
+                "endian": "le",
+                "format": "u8",
+                "kind": "numberTypeNode"
+              }
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "userBSettlementDestination",
+            "type": {
+              "item": {
+                "kind": "publicKeyTypeNode"
+              },
+              "kind": "optionTypeNode",
+              "prefix": {
+                "endian": "le",
+                "format": "u8",
+                "kind": "numberTypeNode"
+              }
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "earliestSettlementTimestamp",
+            "type": {
+              "item": {
+                "endian": "le",
+                "format": "i64",
+                "kind": "numberTypeNode"
+              },
+              "kind": "optionTypeNode",
+              "prefix": {
+                "endian": "le",
+                "format": "u8",
+                "kind": "numberTypeNode"
+              }
+            }
+          }
+        ],
+        "discriminators": [
+          {
+            "kind": "fieldDiscriminatorNode",
+            "name": "discriminator",
+            "offset": 0
+          }
+        ],
+        "kind": "instructionNode",
+        "name": "createConfidentialDvp"
+      },
+      {
+        "accounts": [
+          {
+            "docs": [
+              "Depositor; must equal dvp.user_a or dvp.user_b; receives closed proof-context rent"
+            ],
+            "isSigner": true,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "signer"
+          },
+          {
+            "docs": [
+              "SwapDvp PDA (signs the transfer as authority)"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "swapDvp"
+          },
+          {
+            "docs": [
+              "Mint of the leg being reclaimed; must equal dvp.mint_a or dvp.mint_b"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "mint"
+          },
+          {
+            "docs": [
+              "DvP's escrow ATA for the leg's mint"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "dvpSourceAta"
+          },
+          {
+            "docs": [
+              "Signer's canonical ATA for the leg's mint"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "signerDestAta"
+          },
+          {
+            "docs": [
+              "SPL Token or Token-2022 program; must own mint"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "tokenProgram"
+          },
+          {
+            "docs": [
+              "SPL Memo program; only used if signer_dest_ata requires a memo"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "memoProgram"
+          },
+          {
+            "docs": [
+              "ZK ElGamal Proof program; closes proof contexts and returns rent to the signer"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "zkElgamalProofProgram"
+          },
+          {
+            "docs": [
+              "CiphertextCommitmentEquality context for Full or Partial; program-id placeholder for None"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "equalityContext"
+          },
+          {
+            "docs": [
+              "BatchedGroupedCiphertext3HandlesValidity context for Full or Partial; program-id placeholder for None"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "validityContext"
+          },
+          {
+            "docs": [
+              "BatchedRangeProofU128 context for Full or Partial; program-id placeholder for None"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "rangeContext"
+          },
+          {
+            "docs": [
+              "ZeroCiphertext context for Full; program-id placeholder for None or Partial"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "zeroContext"
+          }
+        ],
+        "arguments": [
+          {
+            "defaultValue": {
+              "kind": "numberValueNode",
+              "number": 7
+            },
+            "defaultValueStrategy": "omitted",
+            "kind": "instructionArgumentNode",
+            "name": "discriminator",
+            "type": {
+              "endian": "le",
+              "format": "u8",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "legBRefund",
+            "type": {
+              "kind": "definedTypeLinkNode",
+              "name": "legBRefund"
+            }
+          }
+        ],
+        "discriminators": [
+          {
+            "kind": "fieldDiscriminatorNode",
+            "name": "discriminator",
+            "offset": 0
+          }
+        ],
+        "kind": "instructionNode",
+        "name": "reclaimConfidentialDvp"
+      },
+      {
+        "accounts": [
+          {
+            "docs": [
+              "Must equal dvp.settlement_authority; receives closed-account rent"
+            ],
+            "isSigner": true,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "settlementAuthority"
+          },
+          {
+            "docs": [
+              "SwapDvp PDA (signs CPIs, then closed)"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "swapDvp"
+          },
+          {
+            "docs": [
+              "Must equal dvp.mint_a"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "mintA"
+          },
+          {
+            "docs": [
+              "Must equal dvp.mint_b"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "mintB"
+          },
+          {
+            "docs": [
+              "Asset escrow (drained, then closed)"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "dvpAtaA"
+          },
+          {
+            "docs": [
+              "Confidential leg B escrow; left open if balances remain after the operation"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "dvpAtaB"
+          },
+          {
+            "docs": [
+              "user_a_settlement_destination's ATA for mint_b; receives the leg B payment (destination defaults to user_a)"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "userADestinationAtaB"
+          },
+          {
+            "docs": [
+              "user_b_settlement_destination's ATA for mint_a; receives the asset leg (destination defaults to user_b)"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "userBDestinationAtaA"
+          },
+          {
+            "docs": [
+              "user_a's ATA for mint_a; receives any asset-leg surplus refund. Required and must be pre-initialized: anyone can dust the escrow, forcing a surplus refund, and a missing ATA reverts the whole Settle"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "userAAtaA"
+          },
+          {
+            "docs": [
+              "user_b's ATA for mint_b; receives any leg B surplus refund. Required and must be pre-initialized, same as user_a_ata_a"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "userBAtaB"
+          },
+          {
+            "docs": [
+              "SPL Token or Token-2022 program; must own mint_a"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "tokenProgramA"
+          },
+          {
+            "docs": [
+              "Token-2022 program; must own mint_b"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "tokenProgramB"
+          },
+          {
+            "docs": [
+              "SPL Memo program; only used for destinations that require a memo"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "memoProgram"
+          },
+          {
+            "docs": [
+              "ZK ElGamal Proof program; closes proof contexts and returns rent to the signer"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "zkElgamalProofProgram"
+          },
+          {
+            "docs": [
+              "CiphertextCommitmentEquality context for the leg B payment"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "paymentEqualityContext"
+          },
+          {
+            "docs": [
+              "BatchedGroupedCiphertext3HandlesValidity context for the leg B payment"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "paymentValidityContext"
+          },
+          {
+            "docs": [
+              "BatchedRangeProofU128 context for the leg B payment"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "paymentRangeContext"
+          },
+          {
+            "docs": [
+              "CiphertextCiphertextEquality context binding the low payment limb to the stored amount"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "eqLoContext"
+          },
+          {
+            "docs": [
+              "CiphertextCiphertextEquality context binding the high payment limb to the stored amount"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "eqHiContext"
+          },
+          {
+            "docs": [
+              "ZeroCiphertext context proving the leg B escrow is empty after payment and surplus refund"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "zeroContext"
+          },
+          {
+            "docs": [
+              "CiphertextCommitmentEquality context for surplus_b; program-id placeholder when absent"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "surplusEqualityContext"
+          },
+          {
+            "docs": [
+              "BatchedGroupedCiphertext3HandlesValidity context for surplus_b; program-id placeholder when absent"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "surplusValidityContext"
+          },
+          {
+            "docs": [
+              "BatchedRangeProofU128 context for surplus_b; program-id placeholder when absent"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "surplusRangeContext"
+          }
+        ],
+        "arguments": [
+          {
+            "defaultValue": {
+              "kind": "numberValueNode",
+              "number": 8
+            },
+            "defaultValueStrategy": "omitted",
+            "kind": "instructionArgumentNode",
+            "name": "discriminator",
+            "type": {
+              "endian": "le",
+              "format": "u8",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "legAExtrasCount",
+            "type": {
+              "endian": "le",
+              "format": "u8",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "payment",
+            "type": {
+              "kind": "definedTypeLinkNode",
+              "name": "ctTransferData"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "surplusB",
+            "type": {
+              "item": {
+                "kind": "definedTypeLinkNode",
+                "name": "ctTransferData"
+              },
+              "kind": "optionTypeNode",
+              "prefix": {
+                "endian": "le",
+                "format": "u8",
+                "kind": "numberTypeNode"
+              }
+            }
+          }
+        ],
+        "discriminators": [
+          {
+            "kind": "fieldDiscriminatorNode",
+            "name": "discriminator",
+            "offset": 0
+          }
+        ],
+        "kind": "instructionNode",
+        "name": "settleConfidentialDvp"
+      },
+      {
+        "accounts": [
+          {
+            "docs": [
+              "Must equal dvp.settlement_authority; receives closed-account rent"
+            ],
+            "isSigner": true,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "settlementAuthority"
+          },
+          {
+            "docs": [
+              "SwapDvp PDA (signs CPIs, then closed)"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "swapDvp"
+          },
+          {
+            "docs": [
+              "Must equal dvp.mint_a"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "mintA"
+          },
+          {
+            "docs": [
+              "Must equal dvp.mint_b"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "mintB"
+          },
+          {
+            "docs": [
+              "Asset escrow (drained if funded, then closed)"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "dvpAtaA"
+          },
+          {
+            "docs": [
+              "Confidential leg B escrow; left open if balances remain after the operation"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "dvpAtaB"
+          },
+          {
+            "docs": [
+              "user_a's ATA for mint_a; refund destination"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "userAAtaA"
+          },
+          {
+            "docs": [
+              "user_b's ATA for mint_b; refund destination"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "userBAtaB"
+          },
+          {
+            "docs": [
+              "SPL Token or Token-2022 program; must own mint_a"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "tokenProgramA"
+          },
+          {
+            "docs": [
+              "Token-2022 program; must own mint_b"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "tokenProgramB"
+          },
+          {
+            "docs": [
+              "SPL Memo program; only used for destinations that require a memo"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "memoProgram"
+          },
+          {
+            "docs": [
+              "ZK ElGamal Proof program; closes proof contexts and returns rent to the signer"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "zkElgamalProofProgram"
+          },
+          {
+            "docs": [
+              "CiphertextCommitmentEquality context for Full or Partial; program-id placeholder for None"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "equalityContext"
+          },
+          {
+            "docs": [
+              "BatchedGroupedCiphertext3HandlesValidity context for Full or Partial; program-id placeholder for None"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "validityContext"
+          },
+          {
+            "docs": [
+              "BatchedRangeProofU128 context for Full or Partial; program-id placeholder for None"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "rangeContext"
+          },
+          {
+            "docs": [
+              "ZeroCiphertext context for Full; program-id placeholder for None or Partial"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "zeroContext"
+          }
+        ],
+        "arguments": [
+          {
+            "defaultValue": {
+              "kind": "numberValueNode",
+              "number": 9
+            },
+            "defaultValueStrategy": "omitted",
+            "kind": "instructionArgumentNode",
+            "name": "discriminator",
+            "type": {
+              "endian": "le",
+              "format": "u8",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "legAExtrasCount",
+            "type": {
+              "endian": "le",
+              "format": "u8",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "legBRefund",
+            "type": {
+              "kind": "definedTypeLinkNode",
+              "name": "legBRefund"
+            }
+          }
+        ],
+        "discriminators": [
+          {
+            "kind": "fieldDiscriminatorNode",
+            "name": "discriminator",
+            "offset": 0
+          }
+        ],
+        "kind": "instructionNode",
+        "name": "cancelConfidentialDvp"
+      },
+      {
+        "accounts": [
+          {
+            "docs": [
+              "Must equal dvp.user_a or dvp.user_b; receives closed-account rent"
+            ],
+            "isSigner": true,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "signer"
+          },
+          {
+            "docs": [
+              "SwapDvp PDA (signs CPIs, then closed)"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "swapDvp"
+          },
+          {
+            "docs": [
+              "Must equal dvp.mint_a"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "mintA"
+          },
+          {
+            "docs": [
+              "Must equal dvp.mint_b"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "mintB"
+          },
+          {
+            "docs": [
+              "Asset escrow (drained if funded, then closed)"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "dvpAtaA"
+          },
+          {
+            "docs": [
+              "Confidential leg B escrow; left open if balances remain after the operation"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "dvpAtaB"
+          },
+          {
+            "docs": [
+              "user_a's ATA for mint_a; refund destination"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "userAAtaA"
+          },
+          {
+            "docs": [
+              "user_b's ATA for mint_b; refund destination"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "userBAtaB"
+          },
+          {
+            "docs": [
+              "SPL Token or Token-2022 program; must own mint_a"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "tokenProgramA"
+          },
+          {
+            "docs": [
+              "Token-2022 program; must own mint_b"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "tokenProgramB"
+          },
+          {
+            "docs": [
+              "SPL Memo program; only used for destinations that require a memo"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "memoProgram"
+          },
+          {
+            "docs": [
+              "ZK ElGamal Proof program; closes proof contexts and returns rent to the signer"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "zkElgamalProofProgram"
+          },
+          {
+            "docs": [
+              "CiphertextCommitmentEquality context for Full or Partial; program-id placeholder for None"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "equalityContext"
+          },
+          {
+            "docs": [
+              "BatchedGroupedCiphertext3HandlesValidity context for Full or Partial; program-id placeholder for None"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "validityContext"
+          },
+          {
+            "docs": [
+              "BatchedRangeProofU128 context for Full or Partial; program-id placeholder for None"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "rangeContext"
+          },
+          {
+            "docs": [
+              "ZeroCiphertext context for Full; program-id placeholder for None or Partial"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "zeroContext"
+          }
+        ],
+        "arguments": [
+          {
+            "defaultValue": {
+              "kind": "numberValueNode",
+              "number": 10
+            },
+            "defaultValueStrategy": "omitted",
+            "kind": "instructionArgumentNode",
+            "name": "discriminator",
+            "type": {
+              "endian": "le",
+              "format": "u8",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "legAExtrasCount",
+            "type": {
+              "endian": "le",
+              "format": "u8",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "legBRefund",
+            "type": {
+              "kind": "definedTypeLinkNode",
+              "name": "legBRefund"
+            }
+          }
+        ],
+        "discriminators": [
+          {
+            "kind": "fieldDiscriminatorNode",
+            "name": "discriminator",
+            "offset": 0
+          }
+        ],
+        "kind": "instructionNode",
+        "name": "rejectConfidentialDvp"
+      },
+      {
+        "accounts": [
+          {
+            "docs": [
+              "Must equal user_b from the original seeds; receives closed escrow and proof-context rent"
+            ],
+            "isSigner": true,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "signer"
+          },
+          {
+            "docs": [
+              "Closed SwapDvp address, re-derived from the seed args; must be system-owned and empty (signs the CPIs)"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "swapDvp"
+          },
+          {
+            "docs": [
+              "Nonce tombstone PDA for swap_dvp; must be program-owned"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "nonceTombstone"
+          },
+          {
+            "docs": [
+              "Leg B mint; must equal mint_b from the original seeds"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "mint"
+          },
+          {
+            "docs": [
+              "Confidential leg B escrow of the closed swap; closed only when all balances are zero"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "dvpEscrowAta"
+          },
+          {
+            "docs": [
+              "Signer's canonical ATA for the leg's mint"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "signerDestAta"
+          },
+          {
+            "docs": [
+              "Token-2022 program that owns the leg B escrow"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "tokenProgram"
+          },
+          {
+            "docs": [
+              "SPL Memo program; only used if signer_dest_ata requires a memo"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "memoProgram"
+          },
+          {
+            "docs": [
+              "ZK ElGamal Proof program; closes proof contexts and returns rent to the signer"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "zkElgamalProofProgram"
+          },
+          {
+            "docs": [
+              "CiphertextCommitmentEquality context for Full or Partial; program-id placeholder for None"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "equalityContext"
+          },
+          {
+            "docs": [
+              "BatchedGroupedCiphertext3HandlesValidity context for Full or Partial; program-id placeholder for None"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "validityContext"
+          },
+          {
+            "docs": [
+              "BatchedRangeProofU128 context for Full or Partial; program-id placeholder for None"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "rangeContext"
+          },
+          {
+            "docs": [
+              "ZeroCiphertext context for Full; program-id placeholder for None or Partial"
+            ],
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "zeroContext"
+          }
+        ],
+        "arguments": [
+          {
+            "defaultValue": {
+              "kind": "numberValueNode",
+              "number": 11
+            },
+            "defaultValueStrategy": "omitted",
+            "kind": "instructionArgumentNode",
+            "name": "discriminator",
+            "type": {
+              "endian": "le",
+              "format": "u8",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "settlementAuthority",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "userA",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "userB",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "mintA",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "mintB",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "nonce",
+            "type": {
+              "endian": "le",
+              "format": "u64",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "legBRefund",
+            "type": {
+              "kind": "definedTypeLinkNode",
+              "name": "legBRefund"
+            }
+          }
+        ],
+        "discriminators": [
+          {
+            "kind": "fieldDiscriminatorNode",
+            "name": "discriminator",
+            "offset": 0
+          }
+        ],
+        "kind": "instructionNode",
+        "name": "recoverConfidentialDvp"
+      },
+      {
+        "accounts": [
+          {
+            "docs": [
+              "user_a, user_b or settlement_authority from the swap state or original seeds"
+            ],
+            "isSigner": true,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "signer"
+          },
+          {
+            "docs": [
+              "SwapDvp PDA derived from the seed arguments; may be open or closed"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "swapDvp"
+          },
+          {
+            "docs": [
+              "Nonce tombstone PDA; proves the swap existed when swap_dvp is closed"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "nonceTombstone"
+          },
+          {
+            "docs": [
+              "Confidential leg B escrow; pending credits are applied to its available balance"
+            ],
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "dvpAtaB"
+          },
+          {
+            "docs": [
+              "Token-2022 program that owns the leg B escrow"
+            ],
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "tokenProgram"
+          }
+        ],
+        "arguments": [
+          {
+            "defaultValue": {
+              "kind": "numberValueNode",
+              "number": 12
+            },
+            "defaultValueStrategy": "omitted",
+            "kind": "instructionArgumentNode",
+            "name": "discriminator",
+            "type": {
+              "endian": "le",
+              "format": "u8",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "expectedPendingBalanceCreditCounter",
+            "type": {
+              "endian": "le",
+              "format": "u64",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "newDecryptableAvailableBalance",
+            "type": {
+              "count": {
+                "kind": "fixedCountNode",
+                "value": 36
+              },
+              "item": {
+                "endian": "le",
+                "format": "u8",
+                "kind": "numberTypeNode"
+              },
+              "kind": "arrayTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "settlementAuthority",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "userA",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "userB",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "mintA",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "mintB",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "nonce",
+            "type": {
+              "endian": "le",
+              "format": "u64",
+              "kind": "numberTypeNode"
+            }
+          }
+        ],
+        "discriminators": [
+          {
+            "kind": "fieldDiscriminatorNode",
+            "name": "discriminator",
+            "offset": 0
+          }
+        ],
+        "kind": "instructionNode",
+        "name": "applyConfidentialDvp"
       }
     ],
     "kind": "programNode",

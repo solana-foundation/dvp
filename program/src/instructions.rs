@@ -4,6 +4,8 @@ use alloc::string::String;
 use codama::CodamaInstructions;
 use pinocchio::Address as Pubkey;
 
+use crate::processor::shared::confidential::{CtTransferData, LegBRefund};
+
 /// Instructions for the DvP Swap Program.
 ///
 /// Lifecycle: Create → fund each leg via raw SPL Transfer to the leg's
@@ -395,4 +397,507 @@ pub enum DvpSwapProgramInstruction {
         /// Original `nonce` seed input.
         nonce: u64,
     } = 5,
+
+    /// Creates a DvP with a confidential leg B.
+    #[codama(account(
+        name = "payer",
+        docs = "Funds account/ATA creation rent",
+        signer,
+        writable
+    ))]
+    #[codama(account(name = "swap_dvp", docs = "SwapDvp PDA to be created", writable))]
+    #[codama(account(
+        name = "nonce_tombstone",
+        docs = "Per-DvP nonce tombstone PDA, created here and never closed; rejects nonce reuse",
+        writable
+    ))]
+    #[codama(account(
+        name = "settlement_authority",
+        docs = "Third-party authority allowed to settle/cancel; must not be executable so it can receive closed-account rent"
+    ))]
+    #[codama(account(
+        name = "user_a",
+        docs = "Seller (delivers mint_a). Must be a system-owned, non-executable account so it can authorize Reject/Reclaim/Recover"
+    ))]
+    #[codama(account(
+        name = "user_b",
+        docs = "Buyer (delivers mint_b). Same signer-capability requirement as user_a"
+    ))]
+    #[codama(account(name = "mint_a", docs = "Mint of the asset leg (seller delivers)"))]
+    #[codama(account(
+        name = "mint_b",
+        docs = "Token-2022 mint for leg B with ConfidentialTransferMint"
+    ))]
+    #[codama(account(
+        name = "dvp_ata_a",
+        docs = "swap_dvp's ATA for mint_a (created here)",
+        writable
+    ))]
+    #[codama(account(
+        name = "dvp_ata_b",
+        docs = "swap_dvp's ATA for mint_b; created and configured for confidential transfers",
+        writable
+    ))]
+    #[codama(account(name = "system_program", docs = "System program"))]
+    #[codama(account(
+        name = "token_program_a",
+        docs = "SPL Token or Token-2022 program; must own mint_a"
+    ))]
+    #[codama(account(name = "token_program_b", docs = "Token-2022 program; must own mint_b"))]
+    #[codama(account(
+        name = "associated_token_program",
+        docs = "Associated Token Account program"
+    ))]
+    #[codama(account(
+        name = "instructions_sysvar",
+        docs = "Instructions sysvar used to locate the inline PubkeyValidity proof"
+    ))]
+    CreateConfidentialDvp {
+        amount_a: u64,
+        expiry_timestamp: i64,
+        nonce: u64,
+        amount_b_ciphertext_lo: [u8; 64],
+        amount_b_ciphertext_hi: [u8; 64],
+        decryptable_zero_balance: [u8; 36],
+        pubkey_validity_proof_offset: i8,
+        ref_string: Option<String>,
+        user_a_settlement_destination: Option<Pubkey>,
+        user_b_settlement_destination: Option<Pubkey>,
+        earliest_settlement_timestamp: Option<i64>,
+    } = 6,
+
+    /// Refunds the signer's leg while the confidential swap stays open.
+    #[codama(account(
+        name = "signer",
+        docs = "Depositor; must equal dvp.user_a or dvp.user_b; receives closed proof-context rent",
+        signer,
+        writable
+    ))]
+    #[codama(account(
+        name = "swap_dvp",
+        docs = "SwapDvp PDA (signs the transfer as authority)"
+    ))]
+    #[codama(account(
+        name = "mint",
+        docs = "Mint of the leg being reclaimed; must equal dvp.mint_a or dvp.mint_b"
+    ))]
+    #[codama(account(
+        name = "dvp_source_ata",
+        docs = "DvP's escrow ATA for the leg's mint",
+        writable
+    ))]
+    #[codama(account(
+        name = "signer_dest_ata",
+        docs = "Signer's canonical ATA for the leg's mint",
+        writable
+    ))]
+    #[codama(account(
+        name = "token_program",
+        docs = "SPL Token or Token-2022 program; must own mint"
+    ))]
+    #[codama(account(
+        name = "memo_program",
+        docs = "SPL Memo program; only used if signer_dest_ata requires a memo"
+    ))]
+    #[codama(account(
+        name = "zk_elgamal_proof_program",
+        docs = "ZK ElGamal Proof program; closes proof contexts and returns rent to the signer"
+    ))]
+    #[codama(account(
+        name = "equality_context",
+        docs = "CiphertextCommitmentEquality context for Full or Partial; program-id placeholder for None",
+        writable,
+        optional
+    ))]
+    #[codama(account(
+        name = "validity_context",
+        docs = "BatchedGroupedCiphertext3HandlesValidity context for Full or Partial; program-id placeholder for None",
+        writable,
+        optional
+    ))]
+    #[codama(account(
+        name = "range_context",
+        docs = "BatchedRangeProofU128 context for Full or Partial; program-id placeholder for None",
+        writable,
+        optional
+    ))]
+    #[codama(account(
+        name = "zero_context",
+        docs = "ZeroCiphertext context for Full; program-id placeholder for None or Partial",
+        writable,
+        optional
+    ))]
+    ReclaimConfidentialDvp { leg_b_refund: LegBRefund } = 7,
+
+    /// Settles the confidential payment and refunds any surplus.
+    #[codama(account(
+        name = "settlement_authority",
+        docs = "Must equal dvp.settlement_authority; receives closed-account rent",
+        signer,
+        writable
+    ))]
+    #[codama(account(
+        name = "swap_dvp",
+        docs = "SwapDvp PDA (signs CPIs, then closed)",
+        writable
+    ))]
+    #[codama(account(name = "mint_a", docs = "Must equal dvp.mint_a"))]
+    #[codama(account(name = "mint_b", docs = "Must equal dvp.mint_b"))]
+    #[codama(account(
+        name = "dvp_ata_a",
+        docs = "Asset escrow (drained, then closed)",
+        writable
+    ))]
+    #[codama(account(
+        name = "dvp_ata_b",
+        docs = "Confidential leg B escrow; left open if balances remain after the operation",
+        writable
+    ))]
+    #[codama(account(
+        name = "user_a_destination_ata_b",
+        docs = "user_a_settlement_destination's ATA for mint_b; receives the leg B payment (destination defaults to user_a)",
+        writable
+    ))]
+    #[codama(account(
+        name = "user_b_destination_ata_a",
+        docs = "user_b_settlement_destination's ATA for mint_a; receives the asset leg (destination defaults to user_b)",
+        writable
+    ))]
+    #[codama(account(
+        name = "user_a_ata_a",
+        docs = "user_a's ATA for mint_a; receives any asset-leg surplus refund. Required and must be pre-initialized: anyone can dust the escrow, forcing a surplus refund, and a missing ATA reverts the whole Settle",
+        writable
+    ))]
+    #[codama(account(
+        name = "user_b_ata_b",
+        docs = "user_b's ATA for mint_b; receives any leg B surplus refund. Required and must be pre-initialized, same as user_a_ata_a",
+        writable
+    ))]
+    #[codama(account(
+        name = "token_program_a",
+        docs = "SPL Token or Token-2022 program; must own mint_a"
+    ))]
+    #[codama(account(name = "token_program_b", docs = "Token-2022 program; must own mint_b"))]
+    #[codama(account(
+        name = "memo_program",
+        docs = "SPL Memo program; only used for destinations that require a memo"
+    ))]
+    #[codama(account(
+        name = "zk_elgamal_proof_program",
+        docs = "ZK ElGamal Proof program; closes proof contexts and returns rent to the signer"
+    ))]
+    #[codama(account(
+        name = "payment_equality_context",
+        docs = "CiphertextCommitmentEquality context for the leg B payment",
+        writable
+    ))]
+    #[codama(account(
+        name = "payment_validity_context",
+        docs = "BatchedGroupedCiphertext3HandlesValidity context for the leg B payment",
+        writable
+    ))]
+    #[codama(account(
+        name = "payment_range_context",
+        docs = "BatchedRangeProofU128 context for the leg B payment",
+        writable
+    ))]
+    #[codama(account(
+        name = "eq_lo_context",
+        docs = "CiphertextCiphertextEquality context binding the low payment limb to the stored amount",
+        writable
+    ))]
+    #[codama(account(
+        name = "eq_hi_context",
+        docs = "CiphertextCiphertextEquality context binding the high payment limb to the stored amount",
+        writable
+    ))]
+    #[codama(account(
+        name = "zero_context",
+        docs = "ZeroCiphertext context proving the leg B escrow is empty after payment and surplus refund",
+        writable
+    ))]
+    #[codama(account(
+        name = "surplus_equality_context",
+        docs = "CiphertextCommitmentEquality context for surplus_b; program-id placeholder when absent",
+        writable,
+        optional
+    ))]
+    #[codama(account(
+        name = "surplus_validity_context",
+        docs = "BatchedGroupedCiphertext3HandlesValidity context for surplus_b; program-id placeholder when absent",
+        writable,
+        optional
+    ))]
+    #[codama(account(
+        name = "surplus_range_context",
+        docs = "BatchedRangeProofU128 context for surplus_b; program-id placeholder when absent",
+        writable,
+        optional
+    ))]
+    SettleConfidentialDvp {
+        leg_a_extras_count: u8,
+        payment: CtTransferData,
+        surplus_b: Option<CtTransferData>,
+    } = 8,
+
+    /// Refunds both legs and closes the confidential swap.
+    #[codama(account(
+        name = "settlement_authority",
+        docs = "Must equal dvp.settlement_authority; receives closed-account rent",
+        signer,
+        writable
+    ))]
+    #[codama(account(
+        name = "swap_dvp",
+        docs = "SwapDvp PDA (signs CPIs, then closed)",
+        writable
+    ))]
+    #[codama(account(name = "mint_a", docs = "Must equal dvp.mint_a"))]
+    #[codama(account(name = "mint_b", docs = "Must equal dvp.mint_b"))]
+    #[codama(account(
+        name = "dvp_ata_a",
+        docs = "Asset escrow (drained if funded, then closed)",
+        writable
+    ))]
+    #[codama(account(
+        name = "dvp_ata_b",
+        docs = "Confidential leg B escrow; left open if balances remain after the operation",
+        writable
+    ))]
+    #[codama(account(
+        name = "user_a_ata_a",
+        docs = "user_a's ATA for mint_a; refund destination",
+        writable
+    ))]
+    #[codama(account(
+        name = "user_b_ata_b",
+        docs = "user_b's ATA for mint_b; refund destination",
+        writable
+    ))]
+    #[codama(account(
+        name = "token_program_a",
+        docs = "SPL Token or Token-2022 program; must own mint_a"
+    ))]
+    #[codama(account(name = "token_program_b", docs = "Token-2022 program; must own mint_b"))]
+    #[codama(account(
+        name = "memo_program",
+        docs = "SPL Memo program; only used for destinations that require a memo"
+    ))]
+    #[codama(account(
+        name = "zk_elgamal_proof_program",
+        docs = "ZK ElGamal Proof program; closes proof contexts and returns rent to the signer"
+    ))]
+    #[codama(account(
+        name = "equality_context",
+        docs = "CiphertextCommitmentEquality context for Full or Partial; program-id placeholder for None",
+        writable,
+        optional
+    ))]
+    #[codama(account(
+        name = "validity_context",
+        docs = "BatchedGroupedCiphertext3HandlesValidity context for Full or Partial; program-id placeholder for None",
+        writable,
+        optional
+    ))]
+    #[codama(account(
+        name = "range_context",
+        docs = "BatchedRangeProofU128 context for Full or Partial; program-id placeholder for None",
+        writable,
+        optional
+    ))]
+    #[codama(account(
+        name = "zero_context",
+        docs = "ZeroCiphertext context for Full; program-id placeholder for None or Partial",
+        writable,
+        optional
+    ))]
+    CancelConfidentialDvp {
+        leg_a_extras_count: u8,
+        leg_b_refund: LegBRefund,
+    } = 9,
+
+    /// Refunds both legs and closes the confidential swap.
+    #[codama(account(
+        name = "signer",
+        docs = "Must equal dvp.user_a or dvp.user_b; receives closed-account rent",
+        signer,
+        writable
+    ))]
+    #[codama(account(
+        name = "swap_dvp",
+        docs = "SwapDvp PDA (signs CPIs, then closed)",
+        writable
+    ))]
+    #[codama(account(name = "mint_a", docs = "Must equal dvp.mint_a"))]
+    #[codama(account(name = "mint_b", docs = "Must equal dvp.mint_b"))]
+    #[codama(account(
+        name = "dvp_ata_a",
+        docs = "Asset escrow (drained if funded, then closed)",
+        writable
+    ))]
+    #[codama(account(
+        name = "dvp_ata_b",
+        docs = "Confidential leg B escrow; left open if balances remain after the operation",
+        writable
+    ))]
+    #[codama(account(
+        name = "user_a_ata_a",
+        docs = "user_a's ATA for mint_a; refund destination",
+        writable
+    ))]
+    #[codama(account(
+        name = "user_b_ata_b",
+        docs = "user_b's ATA for mint_b; refund destination",
+        writable
+    ))]
+    #[codama(account(
+        name = "token_program_a",
+        docs = "SPL Token or Token-2022 program; must own mint_a"
+    ))]
+    #[codama(account(name = "token_program_b", docs = "Token-2022 program; must own mint_b"))]
+    #[codama(account(
+        name = "memo_program",
+        docs = "SPL Memo program; only used for destinations that require a memo"
+    ))]
+    #[codama(account(
+        name = "zk_elgamal_proof_program",
+        docs = "ZK ElGamal Proof program; closes proof contexts and returns rent to the signer"
+    ))]
+    #[codama(account(
+        name = "equality_context",
+        docs = "CiphertextCommitmentEquality context for Full or Partial; program-id placeholder for None",
+        writable,
+        optional
+    ))]
+    #[codama(account(
+        name = "validity_context",
+        docs = "BatchedGroupedCiphertext3HandlesValidity context for Full or Partial; program-id placeholder for None",
+        writable,
+        optional
+    ))]
+    #[codama(account(
+        name = "range_context",
+        docs = "BatchedRangeProofU128 context for Full or Partial; program-id placeholder for None",
+        writable,
+        optional
+    ))]
+    #[codama(account(
+        name = "zero_context",
+        docs = "ZeroCiphertext context for Full; program-id placeholder for None or Partial",
+        writable,
+        optional
+    ))]
+    RejectConfidentialDvp {
+        leg_a_extras_count: u8,
+        leg_b_refund: LegBRefund,
+    } = 10,
+
+    /// Recovers a confidential escrow after the swap closes.
+    #[codama(account(
+        name = "signer",
+        docs = "Must equal user_b from the original seeds; receives closed escrow and proof-context rent",
+        signer,
+        writable
+    ))]
+    #[codama(account(
+        name = "swap_dvp",
+        docs = "Closed SwapDvp address, re-derived from the seed args; must be system-owned and empty (signs the CPIs)"
+    ))]
+    #[codama(account(
+        name = "nonce_tombstone",
+        docs = "Nonce tombstone PDA for swap_dvp; must be program-owned"
+    ))]
+    #[codama(account(
+        name = "mint",
+        docs = "Leg B mint; must equal mint_b from the original seeds"
+    ))]
+    #[codama(account(
+        name = "dvp_escrow_ata",
+        docs = "Confidential leg B escrow of the closed swap; closed only when all balances are zero",
+        writable
+    ))]
+    #[codama(account(
+        name = "signer_dest_ata",
+        docs = "Signer's canonical ATA for the leg's mint",
+        writable
+    ))]
+    #[codama(account(
+        name = "token_program",
+        docs = "Token-2022 program that owns the leg B escrow"
+    ))]
+    #[codama(account(
+        name = "memo_program",
+        docs = "SPL Memo program; only used if signer_dest_ata requires a memo"
+    ))]
+    #[codama(account(
+        name = "zk_elgamal_proof_program",
+        docs = "ZK ElGamal Proof program; closes proof contexts and returns rent to the signer"
+    ))]
+    #[codama(account(
+        name = "equality_context",
+        docs = "CiphertextCommitmentEquality context for Full or Partial; program-id placeholder for None",
+        writable,
+        optional
+    ))]
+    #[codama(account(
+        name = "validity_context",
+        docs = "BatchedGroupedCiphertext3HandlesValidity context for Full or Partial; program-id placeholder for None",
+        writable,
+        optional
+    ))]
+    #[codama(account(
+        name = "range_context",
+        docs = "BatchedRangeProofU128 context for Full or Partial; program-id placeholder for None",
+        writable,
+        optional
+    ))]
+    #[codama(account(
+        name = "zero_context",
+        docs = "ZeroCiphertext context for Full; program-id placeholder for None or Partial",
+        writable,
+        optional
+    ))]
+    RecoverConfidentialDvp {
+        settlement_authority: Pubkey,
+        user_a: Pubkey,
+        user_b: Pubkey,
+        mint_a: Pubkey,
+        mint_b: Pubkey,
+        nonce: u64,
+        leg_b_refund: LegBRefund,
+    } = 11,
+
+    /// Applies pending confidential credits, before or after close.
+    #[codama(account(
+        name = "signer",
+        docs = "user_a, user_b or settlement_authority from the swap state or original seeds",
+        signer
+    ))]
+    #[codama(account(
+        name = "swap_dvp",
+        docs = "SwapDvp PDA derived from the seed arguments; may be open or closed"
+    ))]
+    #[codama(account(
+        name = "nonce_tombstone",
+        docs = "Nonce tombstone PDA; proves the swap existed when swap_dvp is closed"
+    ))]
+    #[codama(account(
+        name = "dvp_ata_b",
+        docs = "Confidential leg B escrow; pending credits are applied to its available balance",
+        writable
+    ))]
+    #[codama(account(
+        name = "token_program",
+        docs = "Token-2022 program that owns the leg B escrow"
+    ))]
+    ApplyConfidentialDvp {
+        expected_pending_balance_credit_counter: u64,
+        new_decryptable_available_balance: [u8; 36],
+        settlement_authority: Pubkey,
+        user_a: Pubkey,
+        user_b: Pubkey,
+        mint_a: Pubkey,
+        mint_b: Pubkey,
+        nonce: u64,
+    } = 12,
 }

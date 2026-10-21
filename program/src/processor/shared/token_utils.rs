@@ -289,11 +289,11 @@ pub fn get_mint_authority(mint_info: &AccountView) -> Result<Option<Address>, Pr
 /// Everything else is allowed, including `Pausable`, `PermanentDelegate`,
 /// `DefaultAccountState`, `TransferHook`, `ConfidentialTransfer`, etc.
 /// `ConfidentialTransfer` on the mint doesn't force confidential
-/// transfers — the public `TransferChecked` path keeps exact amounts —
-/// and the escrow can never receive a confidential deposit because
-/// configuring its `ConfidentialTransferAccount` extension would need
-/// the SwapDvp PDA to sign `ConfigureAccount`. These fail *loudly*
-/// (reverted CPI, atomic rollback) rather than silently — funds stay in
+/// transfers. The public `TransferChecked` path keeps exact amounts.
+/// Public DvP escrows cannot receive confidential deposits because public
+/// instructions never sign `ConfigureAccount` with the SwapDvp PDA.
+/// `CreateConfidentialDvp` does configure leg B for confidential deposits.
+/// Blocking extensions fail *loudly* (reverted CPI, atomic rollback); funds stay in
 /// escrow and recover once the blocking condition lifts.
 /// `PermanentDelegate` is a deliberate carve-out for regulated RWA tokens
 /// (issuer/transfer-agent clawback is an intrinsic property of the asset).
@@ -381,7 +381,7 @@ pub fn requires_memo(to: &AccountView) -> Result<bool, ProgramError> {
 /// passed account only here — callers without a memo destination can pass
 /// any account in the slot.
 #[inline(always)]
-fn invoke_memo(memo_program: &AccountView) -> ProgramResult {
+pub fn invoke_memo(memo_program: &AccountView) -> ProgramResult {
     require!(
         memo_program.address() == &MEMO_PROGRAM_ID,
         ProgramError::IncorrectProgramId

@@ -1,7 +1,8 @@
 use dvp_swap_program_client::{accounts::SwapDvp, instructions::CreateDvpBuilder};
 use litesvm::types::TransactionMetadata;
-use solana_sdk::signature::{Keypair, Signer};
-use spl_associated_token_account::instruction::create_associated_token_account;
+use solana_keypair::Keypair;
+use solana_signer::Signer;
+use spl_associated_token_account_interface::instruction::create_associated_token_account;
 
 use crate::{
     state_utils::{
@@ -537,16 +538,17 @@ fn test_create_dvp_rejects_swap_dvp_preloaded_with_sol() {
 }
 
 /// A preload at or below the rent reserve is harmless (the payer tops
-/// up to exactly the reserve), so it must not block creation: rejecting
-/// it would let anyone grief a trade tuple with a 1-lamport transfer.
+/// up to exactly the reserve), so it must not block creation. The preload
+/// itself must cover rent for a zero-data system account.
 #[test]
 fn test_create_dvp_accepts_swap_dvp_preloaded_below_rent_reserve() {
     let mut context = TestContext::new();
     let fixture = setup_dvp(&mut context, 0);
 
+    let preload = context.svm.minimum_balance_for_rent_exemption(0);
     context
         .svm
-        .airdrop(&fixture.swap_dvp, 1)
+        .airdrop(&fixture.swap_dvp, preload)
         .expect("dust the future PDA");
 
     assert_create_dvp(&mut context, &fixture);
@@ -707,7 +709,7 @@ fn test_create_dvp_accepts_max_len_ref_string() {
 /// user_b, the settlement authority, and both mints are fresh.
 fn create_with_party_a(
     context: &mut TestContext,
-    party_a: solana_sdk::pubkey::Pubkey,
+    party_a: solana_pubkey::Pubkey,
 ) -> Result<TransactionMetadata, String> {
     let user_b = Keypair::new();
     let settlement_authority = Keypair::new();

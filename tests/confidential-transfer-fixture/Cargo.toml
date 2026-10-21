@@ -1,0 +1,16 @@
+[package]
+name = "confidential-transfer-fixture"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
+
+[dependencies]
+pinocchio = { workspace = true, features = ["cpi"] }
+solana-address = { version = "2.0", features = ["curve25519", "decode"] }
+dvp-swap-program = { path = "../../program", features = ["no-entrypoint"] }

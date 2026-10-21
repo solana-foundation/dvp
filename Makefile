@@ -2,18 +2,24 @@ SHELL := /usr/bin/env bash
 .SHELLFLAGS := -euo pipefail -c
 .DEFAULT_GOAL := build
 
-.PHONY: install build build-hook-fixture build-smart-wallet-fixture fmt generate-idl generate-clients
+# Pin the SBF compiler used by Agave 4.2.2's cargo-build-sbf 4.1.0.
+PLATFORM_TOOLS_VERSION := v1.54
+
+.PHONY: install build build-sbf build-hook-fixture build-smart-wallet-fixture build-confidential-fixture fmt generate-idl generate-clients
 .PHONY: unit-test integration-test integration-test-no-build all-test
 .PHONY: unit-coverage coverage-html all-coverage verify-program-id
-
-# Pinned so local and CI builds match regardless of the installed Solana CLI's
-# default. v1.57 (CLI 4.3) pushes process_settle_dvp past the 4096-byte SBF
-# frame and fails to link smart-wallet-fixture (no __rdl_alloc_error_handler).
-SBF_TOOLS_VERSION ?= v1.52
+.PHONY: fetch-test-fixtures check-test-fixtures
 
 # Install JS deps (codama renderers, tsx, etc.)
 install:
 	pnpm install
+
+# External programs are downloaded explicitly and checked before test runs.
+fetch-test-fixtures:
+	bash scripts/fetch-test-fixtures.sh
+
+check-test-fixtures:
+	bash scripts/fetch-test-fixtures.sh --check
 
 # Build the on-chain program. Regenerates clients first so the workspace
 # Rust client crate is up to date before cargo-build-sbf compiles the program.
@@ -22,9 +28,14 @@ install:
 # sbf target).
 build:
 	$(MAKE) generate-clients
-	cd program && cargo-build-sbf --tools-version $(SBF_TOOLS_VERSION)
+	$(MAKE) build-sbf
 	$(MAKE) build-hook-fixture
 	$(MAKE) build-smart-wallet-fixture
+	$(MAKE) build-confidential-fixture
+
+# CI receives generated clients from the generation job before this step.
+build-sbf:
+	cd program && cargo-build-sbf --tools-version $(PLATFORM_TOOLS_VERSION) -- --locked
 
 # Pre-deploy guard: cargo-build-sbf writes a random target/deploy/*-keypair.json
 # that does NOT match declare_id!, so deploying with it (or without an explicit
@@ -46,13 +57,17 @@ verify-program-id:
 # end-to-end. The .so lands in the workspace target/deploy/ alongside
 # the swap program's .so.
 build-hook-fixture:
-	cd tests/transfer-hook-fixture && cargo-build-sbf --tools-version $(SBF_TOOLS_VERSION)
+	cd tests/transfer-hook-fixture && cargo-build-sbf --tools-version $(PLATFORM_TOOLS_VERSION) -- --locked
 
 # Build the smart-wallet fixture used by integration tests to model a
 # Squads-style vault party (signs via CPI). The .so lands in the
 # workspace target/deploy/ alongside the swap program's .so.
 build-smart-wallet-fixture:
-	cd tests/smart-wallet-fixture && cargo-build-sbf --tools-version $(SBF_TOOLS_VERSION)
+	cd tests/smart-wallet-fixture && cargo-build-sbf --tools-version $(PLATFORM_TOOLS_VERSION) -- --locked
+
+# Test-only PDA driver for the shared confidential transfer helpers.
+build-confidential-fixture:
+	cd tests/confidential-transfer-fixture && cargo-build-sbf --tools-version $(PLATFORM_TOOLS_VERSION) -- --locked
 
 # Generate the Codama IDL from the program's annotations.
 generate-idl:
@@ -71,20 +86,28 @@ fmt:
 	@cd tests/integration-tests && cargo clippy --all-targets -- -D warnings
 	pnpm format
 
-# Unit tests: program crate's #[cfg(test)] modules + JS client tests.
+# Unit tests: program and Rust client.
 unit-test:
 	@echo "Running unit tests for swap program..."
-	pnpm test:unit
 	@cd program && cargo test
+	@cargo test -p dvp-swap-program-client --all-features --lib
 
 # Integration tests (litesvm-based).
-integration-test-no-build:
+integration-test-no-build: check-test-fixtures
 	@echo "Running integration tests for swap program..."
 	@cd tests/integration-tests && cargo test -- --nocapture
+	@cargo test -p dvp-swap-program-client --all-features --test integration -- --nocapture
+	$(MAKE) typescript-test
+
+.PHONY: typescript-test
+typescript-test: check-test-fixtures
+	pnpm test
 
 integration-test: build integration-test-no-build
 
-all-test: unit-test integration-test
+# Generate clients and build all programs before running the full test suite.
+all-test: build
+	$(MAKE) unit-test integration-test-no-build
 
 # Run unit tests with coverage
 unit-coverage:

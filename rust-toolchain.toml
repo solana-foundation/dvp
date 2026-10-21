@@ -1,4 +1,4 @@
-# MSRV floor is set by the solana-* crates in Cargo.toml.
-# Agave v3.1.13 requires >= 1.86; don't downgrade below the channel below.
+# Host tests use LiteSVM 0.16 / Agave 4.2. SBF builds use platform-tools.
 [toolchain]
-channel = "1.91.0"
+channel = "1.93.1"
+components = ["rust-analyzer"]

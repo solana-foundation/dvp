@@ -18,6 +18,7 @@ devnet = []
 
 
 [dependencies]
+bytemuck = "1"
 pinocchio = { workspace = true, features = ["cpi", "copy"] }
 solana-address = { version = "2.0", features = ["curve25519"] }
 pinocchio-associated-token-account = { workspace = true }

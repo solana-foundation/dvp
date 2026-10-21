@@ -2,11 +2,10 @@ use dvp_swap_program_client::instructions::{
     CancelDvpBuilder, CreateDvpBuilder, ReclaimDvpBuilder, RejectDvpBuilder, SettleDvpBuilder,
 };
 use litesvm::types::TransactionMetadata;
-use solana_sdk::{
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-};
-use spl_token_2022::instruction::transfer_checked;
+use solana_keypair::Keypair;
+use solana_pubkey::Pubkey;
+use solana_signer::Signer;
+use spl_token_2022_interface::instruction::transfer_checked;
 
 use crate::utils::{
     create_ata, dvp_ata, fund_wallet_ata, nonce_tombstone_pda, set_mint, swap_dvp_pda, TestContext,

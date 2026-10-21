@@ -8,10 +8,9 @@
 use dvp_swap_program_client::instructions::{
     CreateDvpBuilder, ReclaimDvpBuilder, RecoverDvpBuilder, RejectDvpBuilder,
 };
-use solana_sdk::{
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-};
+use solana_keypair::Keypair;
+use solana_pubkey::Pubkey;
+use solana_signer::Signer;
 
 use crate::{
     state_utils::{AMOUNT_A, AMOUNT_B, REF_STRING},

@@ -8,7 +8,8 @@
  * callers must pass `bigint`. CreateDvp is the consent point and the
  * program stores/settles the amounts verbatim, so this is enforced there.
  */
-import { describe, expect, it } from "@jest/globals";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { getCreateDvpInstructionDataEncoder } from "../generated/instructions/createDvp";
 import { getSafeI64Encoder, getSafeU64Encoder } from "../safeNumberCodecs";
 
@@ -32,26 +33,26 @@ describe("CreateDvp u64/i64 args reject unsafe numbers", () => {
     const encoder = getCreateDvpInstructionDataEncoder();
     const lo = encoder.encode(args({ amountA: 2n ** 53n + 1n }));
     const hi = encoder.encode(args({ amountA: 2n ** 53n + 2n }));
-    expect(Buffer.from(lo).equals(Buffer.from(hi))).toBe(false);
+    assert.equal(Buffer.from(lo).equals(Buffer.from(hi)), false);
   });
 
   it("rejects a plain number for amountA instead of rounding it", () => {
     const encoder = getCreateDvpInstructionDataEncoder();
     // 2**53 + 1 is not representable as a number; it silently becomes
     // 2**53. The guard must throw rather than encode the rounded value.
-    expect(() => encoder.encode(args({ amountA: 2 ** 53 + 1 }))).toThrow();
+    assert.throws(() => encoder.encode(args({ amountA: 2 ** 53 + 1 })));
   });
 
   it("rejects a plain number even when it is small and safe", () => {
     const encoder = getCreateDvpInstructionDataEncoder();
-    expect(() => encoder.encode(args({ amountB: 5 }))).toThrow();
+    assert.throws(() => encoder.encode(args({ amountB: 5 })));
   });
 
   it("rejects a plain number for the i64 expiry field", () => {
     const encoder = getCreateDvpInstructionDataEncoder();
-    expect(() =>
+    assert.throws(() =>
       encoder.encode(args({ expiryTimestamp: 1_780_000_000 })),
-    ).toThrow();
+    );
   });
 });
 
@@ -61,21 +62,23 @@ describe("safe 64-bit encoders", () => {
     const big = 2n ** 63n - 1n;
     const expectedU64 = new Uint8Array(8);
     new DataView(expectedU64.buffer).setBigUint64(0, big, true);
-    expect(Buffer.from(getSafeU64Encoder().encode(big))).toEqual(
+    assert.deepEqual(
+      Buffer.from(getSafeU64Encoder().encode(big)),
       Buffer.from(expectedU64),
     );
 
     const expectedI64 = new Uint8Array(8);
     new DataView(expectedI64.buffer).setBigInt64(0, -1n, true);
-    expect(Buffer.from(getSafeI64Encoder().encode(-1n))).toEqual(
+    assert.deepEqual(
+      Buffer.from(getSafeI64Encoder().encode(-1n)),
       Buffer.from(expectedI64),
     );
   });
 
   it("throw on any number, even a safe one", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect(() => getSafeU64Encoder().encode(1 as any)).toThrow(TypeError);
+    assert.throws(() => getSafeU64Encoder().encode(1 as any), TypeError);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect(() => getSafeI64Encoder().encode(1 as any)).toThrow(TypeError);
+    assert.throws(() => getSafeI64Encoder().encode(1 as any), TypeError);
   });
 });

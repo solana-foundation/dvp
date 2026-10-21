@@ -4,16 +4,24 @@
  * derivation helpers must let funders compute canonical addresses instead
  * of trusting attacker-supplied ones.
  */
-import { describe, expect, it } from "@jest/globals";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   getAddressDecoder,
+  type GetProgramAccountsApi,
+  type Rpc,
   type Address,
   type MaybeEncodedAccount,
 } from "@solana/kit";
 import { DVP_SWAP_PROGRAM_PROGRAM_ADDRESS } from "../generated/programs/dvpSwapProgram";
-import { getSwapDvpEncoder } from "../generated/accounts/swapDvp";
 import {
+  decodeSwapDvp,
+  getSwapDvpEncoder,
+} from "../generated/accounts/swapDvp";
+import {
+  CONFIDENTIAL_SWAP_DVP_ACCOUNT_SIZE,
   decodeSwapDvpChecked,
+  fetchSwapDvpAccounts,
   findSwapDvpEscrowAta,
   findSwapDvpPda,
   SWAP_DVP_ACCOUNT_SIZE,
@@ -21,12 +29,17 @@ import {
 
 const SYSTEM_PROGRAM = "11111111111111111111111111111111" as Address;
 const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
+const TOKEN_2022_PROGRAM =
+  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" as Address;
 
 /** Dummy pubkey made of a single byte repeated 32 times. */
 const addressOf = (fill: number) =>
   getAddressDecoder().decode(new Uint8Array(32).fill(fill));
 
-const validData = () =>
+const validData = (
+  tokenProgramA: Address = TOKEN_PROGRAM,
+  tokenProgramB: Address = TOKEN_2022_PROGRAM,
+) =>
   new Uint8Array(
     getSwapDvpEncoder().encode({
       bump: 254,
@@ -35,8 +48,8 @@ const validData = () =>
       mintA: addressOf(3),
       mintB: addressOf(4),
       settlementAuthority: addressOf(5),
-      tokenProgramA: addressOf(6),
-      tokenProgramB: addressOf(7),
+      tokenProgramA,
+      tokenProgramB,
       amountA: 1_000n,
       amountB: 2_500n,
       expiryTimestamp: 1_780_000_000n,
@@ -53,6 +66,7 @@ const validData = () =>
 function encodedAccount(overrides: {
   programAddress?: Address;
   data?: Uint8Array;
+  space?: bigint;
   exists?: boolean;
 }): MaybeEncodedAccount {
   return {
@@ -63,39 +77,91 @@ function encodedAccount(overrides: {
     data: overrides.data ?? validData(),
     executable: false,
     lamports: 1_000_000n,
-    space: BigInt((overrides.data ?? validData()).length),
+    space: overrides.space ?? BigInt((overrides.data ?? validData()).length),
   } as MaybeEncodedAccount;
 }
+
+describe("generated decodeSwapDvp", () => {
+  // Patched by scripts/lib/patch-swap-dvp-exact-size.ts: the generated
+  // reader must not return the base of a 586-byte confidential account.
+  it("accepts only the 458-byte public layout", () => {
+    assert.equal(decodeSwapDvp(encodedAccount({})).exists, true);
+    assert.equal(
+      decodeSwapDvp(encodedAccount({ exists: false })).exists,
+      false,
+    );
+    const confidential = new Uint8Array(CONFIDENTIAL_SWAP_DVP_ACCOUNT_SIZE);
+    confidential.set(validData());
+    for (const data of [confidential, validData().slice(0, 450)])
+      assert.throws(
+        () => decodeSwapDvp(encodedAccount({ data })),
+        /SwapDvp account must be 458 bytes/,
+      );
+  });
+});
 
 describe("decodeSwapDvpChecked", () => {
   it("accepts a program-owned, exact-size account", () => {
     const decoded = decodeSwapDvpChecked(encodedAccount({}));
-    expect(decoded.data.amountA).toBe(1_000n);
-    expect(decoded.data.earliestSettlementTimestamp).toEqual({
+    assert.equal(decoded.data.amountA, 1_000n);
+    assert.deepEqual(decoded.data.earliestSettlementTimestamp, {
       __option: "None",
     });
   });
 
   it("rejects a System-owned account even with perfect data", () => {
-    expect(() =>
-      decodeSwapDvpChecked(encodedAccount({ programAddress: SYSTEM_PROGRAM })),
-    ).toThrow(/owned/i);
+    assert.throws(
+      () =>
+        decodeSwapDvpChecked(
+          encodedAccount({ programAddress: SYSTEM_PROGRAM }),
+        ),
+      /owned/i,
+    );
   });
 
   it("rejects a wrong-size account", () => {
-    expect(() =>
-      decodeSwapDvpChecked(encodedAccount({ data: validData().slice(0, 450) })),
-    ).toThrow(/458|size|length/i);
+    assert.throws(
+      () =>
+        decodeSwapDvpChecked(
+          encodedAccount({ data: validData().slice(0, 450) }),
+        ),
+      /458|size|length/i,
+    );
+  });
+
+  it("rejects a sliced confidential account instead of decoding it as public", () => {
+    assert.throws(
+      () =>
+        decodeSwapDvpChecked(
+          encodedAccount({
+            data: validData(),
+            space: BigInt(CONFIDENTIAL_SWAP_DVP_ACCOUNT_SIZE),
+          }),
+        ),
+      /partial snapshot/,
+    );
+  });
+
+  it("rejects a token program other than SPL Token or Token-2022", () => {
+    for (const data of [
+      validData(addressOf(6)),
+      validData(TOKEN_PROGRAM, addressOf(7)),
+    ]) {
+      assert.throws(
+        () => decodeSwapDvpChecked(encodedAccount({ data })),
+        /Unsupported token program/,
+      );
+    }
   });
 
   it("rejects a missing account", () => {
-    expect(() =>
+    assert.throws(() =>
       decodeSwapDvpChecked(encodedAccount({ exists: false })),
-    ).toThrow();
+    );
   });
 
   it("exposes the on-chain account size", () => {
-    expect(SWAP_DVP_ACCOUNT_SIZE).toBe(458);
+    assert.equal(SWAP_DVP_ACCOUNT_SIZE, 458);
   });
 });
 
@@ -123,7 +189,7 @@ describe("canonical derivation helpers (verify-before-fund)", () => {
       mintB: addressOf(4),
       nonce: 42n,
     });
-    expect(address).toBe("6KvFpfqQsn9n6i4TUYimENwimXvns9yq9k7L9V5VxESz");
+    assert.equal(address, "6KvFpfqQsn9n6i4TUYimENwimXvns9yq9k7L9V5VxESz");
   });
 
   // Escrow ATAs are canonical Associated Token Accounts of the SwapDvp PDA,
@@ -142,7 +208,7 @@ describe("canonical derivation helpers (verify-before-fund)", () => {
       mint: addressOf(3),
       tokenProgram: TOKEN_PROGRAM,
     });
-    expect(ata).toBe("GBrJyDbxFv8EQ14ww1546RimNv256wEJwVv3LpBDDbEZ");
+    assert.equal(ata, "GBrJyDbxFv8EQ14ww1546RimNv256wEJwVv3LpBDDbEZ");
   });
 });
 
@@ -162,23 +228,43 @@ describe("findSwapDvpPda nonce is a lossless u64", () => {
   it("rejects an unsafe number nonce instead of rounding it", () => {
     // 2**53 + 1 is not representable as a number; it silently becomes
     // 2**53. The guard must throw rather than derive a rounded PDA.
-    expect(() =>
-      findSwapDvpPda({
-        ...baseArgs,
-        nonce: (2 ** 53 + 1) as unknown as bigint,
-      }),
-    ).toThrow(/bigint/i);
+    assert.throws(
+      () =>
+        findSwapDvpPda({
+          ...baseArgs,
+          nonce: (2 ** 53 + 1) as unknown as bigint,
+        }),
+      /bigint/i,
+    );
   });
 
   it("rejects a plain number even when small and safe", () => {
-    expect(() =>
-      findSwapDvpPda({ ...baseArgs, nonce: 42 as unknown as bigint }),
-    ).toThrow(/bigint/i);
+    assert.throws(
+      () => findSwapDvpPda({ ...baseArgs, nonce: 42 as unknown as bigint }),
+      /bigint/i,
+    );
   });
 
   it("derives distinct PDAs for distinct large bigint nonces", async () => {
     const [a] = await findSwapDvpPda({ ...baseArgs, nonce: 2n ** 53n + 1n });
     const [b] = await findSwapDvpPda({ ...baseArgs, nonce: 2n ** 53n + 2n });
-    expect(a).not.toBe(b);
+    assert.notEqual(a, b);
+  });
+});
+
+describe("fetchSwapDvpAccounts", () => {
+  it("discovery propagates RPC failures instead of returning an empty list", async () => {
+    const unavailable = new Error("RPC unavailable");
+    const rpc = {
+      getProgramAccounts: () => ({
+        send: async () => {
+          throw unavailable;
+        },
+      }),
+    } as unknown as Rpc<GetProgramAccountsApi>;
+    await assert.rejects(
+      fetchSwapDvpAccounts(rpc),
+      (error) => error === unavailable,
+    );
   });
 });
