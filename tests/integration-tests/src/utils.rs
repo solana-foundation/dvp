@@ -864,24 +864,25 @@ pub fn set_mint_2022_with_transfer_fee(
     write_account(context, mint, data, TOKEN_2022_PROGRAM_ID, 1_000_000_000);
 }
 
-/// InterestBearingConfig — blocked; used in negative tests.
+/// InterestBearingConfig with a non-zero rate for lifecycle tests.
 pub fn set_mint_2022_with_interest_bearing(
     context: &mut TestContext,
     mint: &Pubkey,
     authority: &Pubkey,
 ) {
+    let now = context.now();
     let data = build_mint_2022_with_extensions(&[ExtensionType::InterestBearingConfig], |state| {
         let ext = state.init_extension::<InterestBearingConfig>(true).unwrap();
         ext.rate_authority = MaybeNull::try_from(Some(*authority)).unwrap();
-        ext.initialization_timestamp = 0i64.into();
-        ext.pre_update_average_rate = 0i16.into();
-        ext.last_update_timestamp = 0i64.into();
-        ext.current_rate = 0i16.into();
+        ext.initialization_timestamp = now.into();
+        ext.pre_update_average_rate = 10_000i16.into();
+        ext.last_update_timestamp = now.into();
+        ext.current_rate = 10_000i16.into();
     });
     write_account(context, mint, data, TOKEN_2022_PROGRAM_ID, 1_000_000_000);
 }
 
-/// ScaledUiAmountConfig — blocked; used in negative tests.
+/// ScaledUiAmountConfig with a non-unit multiplier for lifecycle tests.
 pub fn set_mint_2022_with_scaled_ui_amount(
     context: &mut TestContext,
     mint: &Pubkey,
@@ -890,9 +891,9 @@ pub fn set_mint_2022_with_scaled_ui_amount(
     let data = build_mint_2022_with_extensions(&[ExtensionType::ScaledUiAmount], |state| {
         let ext = state.init_extension::<ScaledUiAmountConfig>(true).unwrap();
         ext.authority = MaybeNull::try_from(Some(*authority)).unwrap();
-        ext.multiplier = 1.0f64.into();
+        ext.multiplier = 2.0f64.into();
         ext.new_multiplier_effective_timestamp = 0i64.into();
-        ext.new_multiplier = 1.0f64.into();
+        ext.new_multiplier = 2.0f64.into();
     });
     write_account(context, mint, data, TOKEN_2022_PROGRAM_ID, 1_000_000_000);
 }

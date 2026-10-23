@@ -46,9 +46,10 @@ pub enum DvpSwapProgramError {
     #[error("DvP leg amounts must be non-zero")]
     ZeroAmount,
 
-    /// (10) Mint carries InterestBearing, ScaledUiAmount or NonTransferable,
-    /// or a non-zero transfer-fee basis-point rate. CreateDvp checks active
-    /// and scheduled rates; SettleDvp checks only the active rate.
+    /// (10) Mint carries NonTransferable or a non-zero transfer-fee
+    /// basis-point rate. CreateDvp checks active and scheduled rates;
+    /// SettleDvp checks only the active rate. Confidential leg B also
+    /// rejects any TransferFeeConfig at CreateConfidentialDvp.
     /// Recovery instructions skip this validation.
     #[error("Mint carries an unsupported Token-2022 extension")]
     BlockedMintExtension,

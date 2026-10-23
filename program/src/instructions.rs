@@ -19,11 +19,13 @@ use crate::processor::shared::confidential::{CtTransferData, LegBRefund};
 /// program per leg (`token_program_a` / `token_program_b`), enabling
 /// cross-program swaps (e.g. legacy-SPL ↔ Token-2022). Each token
 /// program account must match the owner of its leg's mint. Mints
-/// carrying InterestBearing, ScaledUiAmount or NonTransferable are rejected
-/// at CreateDvp and SettleDvp. TransferFeeConfig requires zero active and
-/// scheduled basis-point rates at Create; Settle checks only the active rate.
-/// Recovery skips validation but transfers can incur fees. Clients must
-/// harvest withheld escrow fees before instructions that close the escrow.
+/// carrying NonTransferable are rejected at CreateDvp and SettleDvp.
+/// TransferFeeConfig requires zero active and scheduled basis-point rates
+/// at Create; Settle checks only the active rate. InterestBearing and
+/// ScaledUiAmount only affect UI amounts; DvP terms and transfers use
+/// unchanged base units. Recovery skips validation but transfers can incur
+/// fees. Clients must harvest withheld escrow fees before instructions that
+/// close the escrow.
 ///
 /// TransferHook is supported: instructions that issue a `TransferChecked`
 /// CPI (Settle/Cancel/Reject/Reclaim) treat any accounts beyond their
