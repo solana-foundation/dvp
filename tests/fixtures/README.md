@@ -2,8 +2,9 @@
 
 Tests use real Token-2022 and SPL Record binaries from Solana mainnet-beta,
 loaded into LiteSVM with `add_program`. The SHA-256 hashes in `SHA256SUMS`
-pin the exact bytes, including program-dump padding. These match the binaries
-used by the confidential-transfer spike.
+pin the exact bytes, including program-dump padding. Token-2022 is the
+mainnet deployment of solana-program/token-2022 at `8867f751` (OtterSec
+verified build).
 
 | File | Mainnet program |
 | --- | --- |
