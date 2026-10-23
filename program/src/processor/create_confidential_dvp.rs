@@ -9,7 +9,7 @@ use crate::{
     },
     processor::shared::confidential::{
         configure_confidential_account_cpi, disable_non_confidential_credits_cpi,
-        reallocate_confidential_account_cpi, verify_confidential_mint,
+        reallocate_confidential_account_cpi, verify_confidential_mint, verify_no_transfer_fee,
     },
     processor::shared::pda_utils::create_pda_account,
     processor::shared::token_utils::{
@@ -70,6 +70,7 @@ pub fn process_create_confidential_dvp(
         DvpSwapProgramError::MintNotConfidential
     );
     verify_confidential_mint(mint_b_info)?;
+    verify_no_transfer_fee(mint_b_info)?;
     verify_ata_program(associated_token_program_info)?;
     require!(
         instructions_sysvar_info.address() == &pinocchio::sysvars::instructions::INSTRUCTIONS_ID,
@@ -91,10 +92,11 @@ pub fn process_create_confidential_dvp(
     verify_party_signer_capable(user_b_info)?;
     verify_account_owner(mint_a_info, token_program_a_info.address())?;
     verify_account_owner(mint_b_info, token_program_b_info.address())?;
-    validate_mint_extensions(mint_a_info)?;
-    validate_mint_extensions(mint_b_info)?;
+    let clock = Clock::get()?;
+    validate_mint_extensions(mint_a_info, clock.epoch, true)?;
+    validate_mint_extensions(mint_b_info, clock.epoch, true)?;
 
-    let now = Clock::get()?.unix_timestamp;
+    let now = clock.unix_timestamp;
     validate_args(
         &args,
         settlement_authority_info.address(),

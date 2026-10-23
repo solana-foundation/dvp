@@ -19,6 +19,7 @@ use spl_associated_token_account_interface::{
 use spl_token_2022_interface::{
     extension::{
         confidential_transfer::ConfidentialTransferMint,
+        confidential_transfer_fee::ConfidentialTransferFeeConfig,
         interest_bearing_mint::InterestBearingConfig,
         non_transferable::NonTransferable,
         pausable::PausableConfig,
@@ -833,7 +834,7 @@ pub fn malicious_hook_extras(
     ]
 }
 
-/// TransferFeeConfig — a blocked extension; used in negative tests.
+/// TransferFeeConfig with the same initial rate in both schedule entries.
 pub fn set_mint_2022_with_transfer_fee(
     context: &mut TestContext,
     mint: &Pubkey,
@@ -920,6 +921,38 @@ pub fn set_mint_2022_with_confidential_transfer(
             ext.auto_approve_new_accounts = false.into();
             ext.auditor_elgamal_pubkey = Default::default();
         });
+    write_account(context, mint, data, TOKEN_2022_PROGRAM_ID, 1_000_000_000);
+}
+
+/// ConfidentialTransferMint with a zero-rate TransferFeeConfig and the
+/// ConfidentialTransferFeeConfig Token-2022 requires alongside it.
+pub fn set_mint_2022_with_confidential_transfer_fee(
+    context: &mut TestContext,
+    mint: &Pubkey,
+    authority: &Pubkey,
+) {
+    let data = build_mint_2022_with_extensions(
+        &[
+            ExtensionType::ConfidentialTransferMint,
+            ExtensionType::TransferFeeConfig,
+            ExtensionType::ConfidentialTransferFeeConfig,
+        ],
+        |state| {
+            let auth = MaybeNull::try_from(Some(*authority)).unwrap();
+            let ct = state
+                .init_extension::<ConfidentialTransferMint>(true)
+                .unwrap();
+            ct.authority = auth;
+            ct.auto_approve_new_accounts = true.into();
+            let fee = state.init_extension::<TransferFeeConfig>(true).unwrap();
+            fee.transfer_fee_config_authority = auth;
+            fee.withdraw_withheld_authority = auth;
+            let ct_fee = state
+                .init_extension::<ConfidentialTransferFeeConfig>(true)
+                .unwrap();
+            ct_fee.authority = auth;
+        },
+    );
     write_account(context, mint, data, TOKEN_2022_PROGRAM_ID, 1_000_000_000);
 }
 

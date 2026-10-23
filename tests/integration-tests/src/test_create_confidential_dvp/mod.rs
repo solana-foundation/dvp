@@ -6,8 +6,8 @@ use crate::{
     },
     state_utils::{AMOUNT_A, AMOUNT_B},
     utils::{
-        create_ata, set_mint, TestContext, SWAP_PROGRAM_ID, TOKEN_2022_PROGRAM_ID as TOKEN,
-        TOKEN_PROGRAM_ID,
+        create_ata, set_mint, set_mint_2022_with_confidential_transfer_fee, TestContext,
+        SWAP_PROGRAM_ID, TOKEN_2022_PROGRAM_ID as TOKEN, TOKEN_PROGRAM_ID,
     },
 };
 use dvp_swap_program_client::{
@@ -337,6 +337,23 @@ fn create_requires_confidential_mint_and_valid_proof() {
         assert!(context.get_account(&address).is_none());
     }
     f.create(&mut context);
+}
+
+#[test]
+fn create_rejects_fee_configured_confidential_mint() {
+    let mut context = TestContext::new();
+    let f = ConfidentialDvpFixture::new(&mut context, true, false);
+    // Confidential transfers on any fee mint need fee proofs, even at 0 bps.
+    let authority = context.payer.pubkey();
+    set_mint_2022_with_confidential_transfer_fee(&mut context, &f.accounts.mint_b, &authority);
+    assert_error(
+        &mut context,
+        &f.create_instructions(),
+        &[],
+        1,
+        InstructionError::Custom(Error::BlockedMintExtension as u32),
+    );
+    assert!(context.get_account(&f.accounts.swap_dvp).is_none());
 }
 
 #[test]

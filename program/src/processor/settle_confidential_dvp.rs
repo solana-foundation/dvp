@@ -115,15 +115,16 @@ fn settle(
         mint_a_info.owned_by(&dvp.token_program_a) && mint_b_info.owned_by(&dvp.token_program_b),
         ProgramError::InvalidAccountOwner
     );
-    validate_mint_extensions(mint_a_info)?;
-    validate_mint_extensions(mint_b_info)?;
+    let clock = Clock::get()?;
+    validate_mint_extensions(mint_a_info, clock.epoch, false)?;
+    validate_mint_extensions(mint_b_info, clock.epoch, false)?;
     verify_confidential_mint(mint_b_info)?;
     require!(
         get_mint_authority(mint_a_info)?.unwrap_or_default() == dvp.mint_a_authority
             && get_mint_authority(mint_b_info)?.unwrap_or_default() == dvp.mint_b_authority,
         DvpSwapProgramError::MintAuthorityChanged
     );
-    let now = Clock::get()?.unix_timestamp;
+    let now = clock.unix_timestamp;
     require!(now <= dvp.expiry_timestamp, DvpSwapProgramError::DvpExpired);
     if let Some(earliest) = dvp.earliest_settlement_timestamp {
         require!(now >= earliest, DvpSwapProgramError::SettlementTooEarly);

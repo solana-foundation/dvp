@@ -5,6 +5,7 @@ use pinocchio_token_2022::ID as TOKEN_2022_PROGRAM_ID;
 use spl_token_2022::{
     extension::{
         confidential_transfer::{ConfidentialTransferAccount, ConfidentialTransferMint},
+        transfer_fee::TransferFeeConfig,
         BaseStateWithExtensions, ExtensionType, StateWithExtensions,
     },
     state::{Account, Mint},
@@ -84,5 +85,19 @@ pub fn verify_confidential_mint(mint: &AccountView) -> ProgramResult {
     state
         .get_extension::<ConfidentialTransferMint>()
         .map_err(|_| DvpSwapProgramError::MintNotConfidential)?;
+    Ok(())
+}
+
+/// Leg B rejects TransferFeeConfig at any rate: confidential transfers on fee
+/// mints need fee proofs, which Settle doesn't build.
+#[inline(always)]
+pub fn verify_no_transfer_fee(mint: &AccountView) -> ProgramResult {
+    let data = mint.try_borrow()?;
+    let state =
+        StateWithExtensions::<Mint>::unpack(&data).map_err(|_| ProgramError::InvalidAccountData)?;
+    require!(
+        state.get_extension::<TransferFeeConfig>().is_err(),
+        DvpSwapProgramError::BlockedMintExtension
+    );
     Ok(())
 }
