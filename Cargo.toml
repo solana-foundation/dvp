@@ -6,6 +6,7 @@ members = [
     "tests/integration-tests",
     "tests/transfer-hook-fixture",
     "tests/smart-wallet-fixture",
+    "tests/confidential-transfer-fixture",
 ]
 
 resolver = "2"

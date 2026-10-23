@@ -1,13 +1,12 @@
 use dvp_swap_program_client::instructions::{
     CreateDvpBuilder, ReclaimDvpBuilder, RecoverDvpBuilder,
 };
-use solana_sdk::{
-    instruction::Instruction,
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-};
-use spl_associated_token_account::instruction::create_associated_token_account;
-use spl_token_2022::instruction::transfer_checked;
+use solana_instruction::Instruction;
+use solana_keypair::Keypair;
+use solana_pubkey::Pubkey;
+use solana_signer::Signer;
+use spl_associated_token_account_interface::instruction::create_associated_token_account;
+use spl_token_2022_interface::instruction::transfer_checked;
 
 use crate::{
     state_utils::{
@@ -380,12 +379,11 @@ fn test_recover_dvp_token_2022_leg() {
     assert!(context.get_account(&fixture.dvp_ata_b).is_none());
 }
 
-/// Recovery binds the token program to the escrow account, not to the
-/// mint's current owner. A T22 mint closed and recreated under legacy
-/// SPL after the late deposit landed must not strand it: the deposit
-/// sits in the T22 escrow, so recovery with the T22 program still works.
+/// Recovery binds the token program to the escrow, but the pinned
+/// Token-2022 binary also checks the mint owner during TransferChecked.
+/// An injected cross-program recreation therefore blocks recovery.
 #[test]
-fn test_recover_dvp_after_mint_recreated_under_other_token_program() {
+fn test_recover_dvp_rejects_mint_recreated_under_other_token_program() {
     let mut context = TestContext::new();
     let fixture = setup_dvp_with_programs(
         &mut context,
@@ -402,11 +400,12 @@ fn test_recover_dvp_after_mint_recreated_under_other_token_program() {
     assert_fund_a(&mut context, &fixture);
     assert_eq!(get_token_balance(&context, &fixture.dvp_ata_a), AMOUNT_A);
 
-    // The counterparty closes the zero-supply mint and recreates it
-    // under legacy SPL Token.
+    // Inject the owner change to exercise recovery against adversarial
+    // state; this fixture does not establish that recreation is reachable.
     set_mint(&mut context, &fixture.mint_a, &TOKEN_PROGRAM_ID);
 
-    // Recovery with the escrow's own token program still succeeds.
+    let escrow_before = context.get_account(&fixture.dvp_ata_a).unwrap();
+    let destination_before = context.get_account(&fixture.user_a_ata_a).unwrap();
     let ix = recover_ix(
         &fixture,
         &fixture.user_a.pubkey(),
@@ -414,13 +413,15 @@ fn test_recover_dvp_after_mint_recreated_under_other_token_program() {
         &fixture.dvp_ata_a,
         &fixture.user_a_ata_a,
     );
-    context.send(ix, &[&fixture.user_a]).expect("RecoverDvp");
-
+    assert_instruction_error(context.send(ix, &[&fixture.user_a]), "IncorrectProgramId");
     assert_eq!(
-        get_token_balance(&context, &fixture.user_a_ata_a),
-        INITIAL_BALANCE
+        context.get_account(&fixture.dvp_ata_a).unwrap(),
+        escrow_before
     );
-    assert!(context.get_account(&fixture.dvp_ata_a).is_none());
+    assert_eq!(
+        context.get_account(&fixture.user_a_ata_a).unwrap(),
+        destination_before
+    );
 }
 
 /// The escrow/token-program pair must be consistent: passing the

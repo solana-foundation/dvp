@@ -1,6 +1,7 @@
 use crate::{
     error::DvpSwapProgramError,
     processor::shared::account_check::{verify_account_owner, verify_signer, verify_token_program},
+    processor::shared::confidential::has_confidential_transfer_account,
     processor::shared::token_utils::{
         get_mint_decimals, get_token_account_balance, transfer_checked_cpi,
         verify_ata_recipient_if_initialized, verify_canonical_ata,
@@ -52,8 +53,10 @@ const INSTRUCTION_DATA_LEN: usize = 32 * 5 + 8;
 /// unmovable or taxed by the token program itself. That is a
 /// trusted-authority risk, not a guarantee this path can override. The
 /// token program is bound to the escrow account rather than the mint's
-/// current owner, so recovery survives a post-close mint recreation
-/// under the other token program.
+/// current owner, preserving the original ATA address. After mint recreation
+/// under another token program, an empty escrow can still be closed because
+/// no transfer runs. A non-zero Token-2022 escrow cannot be drained in that
+/// state: TransferChecked rejects the mint owner mismatch.
 ///
 /// # Account Layout
 /// 0. `[signer, writable]` signer - Depositor of the leg being recovered; receives the closed escrow's rent
@@ -157,10 +160,10 @@ pub fn process_recover_dvp(
     // dvp_escrow_ata: the dead PDA's canonical escrow for the leg's
     // mint, the only address the documented funding path deposits to.
     // The token program is bound to the escrow account, not to the
-    // mint's current owner: a closed T22 mint can be recreated under
-    // legacy SPL after the deposit landed, and following the drift
-    // would re-derive a different ATA and strand the real escrow. The
-    // escrow authenticates its own namespace: only the ATA program can
+    // mint's current owner. Following a recreated mint's owner would derive
+    // a different ATA. Preserving the address lets an empty old escrow close;
+    // draining a non-zero T22 escrow still requires the mint's owner to match.
+    // The escrow authenticates its own namespace: only the ATA program can
     // create an account at this derived address, and it sets the owner
     // to the token program used in the derivation.
     verify_canonical_ata(
@@ -170,6 +173,10 @@ pub fn process_recover_dvp(
         token_program_info,
     )?;
     verify_account_owner(dvp_escrow_ata_info, token_program_info.address())?;
+    require!(
+        !has_confidential_transfer_account(dvp_escrow_ata_info)?,
+        DvpSwapProgramError::SwapModeMismatch
+    );
     // signer_dest_ata: the depositor's ATA for the leg's mint.
     verify_canonical_ata(
         signer_dest_ata_info,

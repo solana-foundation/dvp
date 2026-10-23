@@ -16,6 +16,19 @@ Two parties — **`user_a`** (seller) and **`user_b`** (buyer) — agree to exch
 
 The trade lives as a single `SwapDvp` PDA with two associated escrow ATAs (one per leg). Each side funds its own leg by sending tokens to the corresponding escrow ATA via a plain SPL Transfer — there's no custom funding instruction, so custodian integrations need no special program call. Settlement transfers both legs in a single transaction, refunds any over-deposit to the depositor, and closes the PDA + escrows.
 
+Confidential leg B is implemented in the program and both clients. Leg A stays
+public; leg B uses Token-2022 Confidential Transfer with an agreed amount below
+`2^48` base units. See the [specification](docs/confidential_transfers/spec.md),
+[key management](docs/confidential_transfers/key-management.md),
+[Rust client guide](docs/confidential_transfers/rust-client.md) and
+[TypeScript client guide](docs/confidential_transfers/typescript-client.md).
+The confidential changes have not been deployed or externally audited.
+
+The state, lifecycle and instructions below describe public mode. Confidential
+swaps use the same PDA seeds, a 586-byte account (the 458-byte public base plus
+two ciphertexts), and `u64::MAX` in the base's `amount_b` field. That sentinel
+is not the agreed payment. Use the checked client readers to distinguish modes.
+
 ## State
 
 ```rust
@@ -76,6 +89,28 @@ PDA seeds: `[b"dvp", settlement_authority, user_a, user_b, mint_a, mint_b, nonce
 | 4   | RejectDvp  | `user_a` or `user_b`   | Refunds any funded legs to depositors, closes SwapDvp + escrows.                                                                                                           |
 | 5   | RecoverDvp | `user_a` or `user_b`   | Post-close only: drains a recreated escrow ATA back to the signer's leg and closes it. Recovers deposits that land after Settle/Cancel/Reject.                             |
 
+### Confidential instructions
+
+| # | Name | Signer | Effect |
+| --- | --- | --- | --- |
+| 6 | CreateConfidentialDvp | payer | Creates the swap and configures escrow B for CT. |
+| 7 | ReclaimConfidentialDvp | `user_a` or `user_b` | Reclaims the signer's leg, keeping the swap open. |
+| 8 | SettleConfidentialDvp | `settlement_authority` | Pays the bound amount, refunds available surplus and closes eligible accounts. |
+| 9 | CancelConfidentialDvp | `settlement_authority` | Refunds the selected available B amount and public A, then closes the swap. |
+| 10 | RejectConfidentialDvp | `user_a` or `user_b` | Same refund path as Cancel, authorized by a party. |
+| 11 | RecoverConfidentialDvp | `user_b` | Recovers leg B after close; leg A uses `RecoverDvp`. |
+| 12 | ApplyConfidentialDvp | `user_a`, `user_b` or `settlement_authority` | Applies pending B credits before or after close. |
+
+Funding remains an ordinary wallet token transfer. Confidential funding requires
+verified swap terms, a configured recipient escrow, and the shared seed.
+Confidential Create stores the amount B ciphertexts unchecked and cannot reject
+a zero amount B; only the funder's client verification catches it. Apply
+moves pending credits to available; terminal operations do not apply them.
+Remaining pending or public B balances keep escrow B open for later recovery.
+`Full` refunds exhaust available CT funds; public withdrawal through `None`
+is available in Reclaim and Recover. See the specification for proof accounts,
+refund modes, mint restrictions and transfer-hook limitations.
+
 ### Notes
 
 - **Funding via raw token transfer.** There is no on-program funding instruction. Each side deposits its leg by transferring tokens to the leg's escrow ATA (escrow ATAs are derivable from public state), so custodian integrations need no custom program call. Use `TransferChecked`, not an unchecked `Transfer`: Token-2022 mints with extension-aware transfer behavior reject unchecked transfers because they need the mint account. A `Pausable` mint needs the mint account supplied so Token-2022 can enforce the current pause state, and a `TransferHook` mint needs the same hook account resolution as terminal transfers (hook program, validation PDA, and the resolved `ExtraAccountMetaList` accounts). A plain unchecked transfer can fail for these mints even though `CreateDvp` accepts them.
@@ -86,7 +121,7 @@ PDA seeds: `[b"dvp", settlement_authority, user_a, user_b, mint_a, mint_b, nonce
 - **Recipient ATAs are authenticated by contents, not just address.** A legacy SPL Token account's owner can be reassigned with `SetAuthority` without changing its ATA pubkey, so address canonicality alone would let a reassigned account keep receiving another wallet's proceeds. Before moving value, every path that transfers to a wallet ATA — `Settle` (both delivery legs), the `Cancel`/`Reject` refund path, and the `Reclaim`/`Recover` drains — re-reads each recipient ATA and requires its `owner`/`mint` fields still match the expected wallet and mint (`RecipientAtaMismatch` otherwise). The surplus and refund legs tolerate an uninitialized ATA (no transfer targets it) but reject a reassigned one, so funds stay in escrow to recover once the owner is restored rather than paying an attacker. Token-2022 ATAs are immune (the ATA program stamps `ImmutableOwner`); this closes the legacy-SPL case.
 - **Opaque client reference (`ref_string`).** `CreateDvp` takes an optional reference (e.g. an off-chain order ID), at most 64 bytes (`RefStringTooLong` otherwise), stored zero-padded on the SwapDvp; omitting it stores all zeros. The program never reads or validates it — it exists for client/indexer correlation, and clients recover the value by trimming trailing zero bytes.
 - **Reclaim/Cancel/Reject drain the escrow.** These instructions transfer the escrow's _actual_ balance back to the depositor, leaving a 0-balance escrow that `CloseAccount` accepts.
-- **Late deposits are recoverable via `RecoverDvp`.** A raw funding transfer never reads the SwapDvp, so it can land after Settle/Cancel/Reject closed the trade — including when a counterparty deliberately front-runs an in-flight funding transaction with Reject. Anyone can recreate the escrow ATA for the dead PDA and the transfer settles into it, out of reach of Reclaim (the SwapDvp is gone) and of a same-nonce Create (tombstone). `RecoverDvp` closes that gap: the depositor supplies the original seed inputs (`settlement_authority`, `user_a`, `user_b`, `mint_a`, `mint_b`, `nonce`), the program re-derives the PDA and requires its nonce tombstone as proof the DvP existed, then drains the escrow to the signer's canonical ATA and closes it (rent to the signer). The signer selects the leg as in Reclaim. The token program is bound to the escrow account rather than the mint's current owner, so recovery still works if a closed Token-2022 mint is recreated under legacy SPL after the deposit landed. Recover skips the extension check like the other unwind paths, so the program never blocks it, but it still issues a real `TransferChecked`: if a mint's authority recreates it as `NonTransferable` or fee-bearing after close, the token program itself makes the late deposit unmovable or fee-taxed, which no recovery path can override (the same trusted-authority exception the live paths carry). Barring that, clients that keep the create parameters can recover a late deposit, and a malicious reject can only abort a trade, never burn the counterparty's deposit.
+- **Late deposits are recoverable via `RecoverDvp`.** A raw funding transfer never reads the SwapDvp, so it can land after Settle/Cancel/Reject closed the trade — including when a counterparty deliberately front-runs an in-flight funding transaction with Reject. Anyone can recreate the escrow ATA for the dead PDA and the transfer settles into it, out of reach of Reclaim (the SwapDvp is gone) and of a same-nonce Create (tombstone). `RecoverDvp` closes that gap: the depositor supplies the original seed inputs (`settlement_authority`, `user_a`, `user_b`, `mint_a`, `mint_b`, `nonce`), the program re-derives the PDA and requires its nonce tombstone as proof the DvP existed, then drains the escrow to the signer's canonical ATA and closes it (rent to the signer). The signer selects the leg as in Reclaim. The token program is bound to the escrow account rather than the mint's current owner, preserving the original ATA address. If the mint is recreated under another token program, an empty escrow can still be closed because no transfer runs. A non-zero old Token-2022 escrow cannot be drained in that state: `TransferChecked` rejects the mint owner mismatch. Recover skips the extension check like the other unwind paths, so the program never blocks it, but it still issues a real `TransferChecked`: if a mint's authority recreates it as `NonTransferable` or fee-bearing after close, the token program itself makes the late deposit unmovable or fee-taxed, which no recovery path can override (the same trusted-authority exception the live paths carry). Barring that, clients that keep the create parameters can recover a late deposit, and a malicious reject can only abort a trade, never burn the counterparty's deposit.
 - **Closed-account rent goes to the closer, not the create payer.** `CreateDvp`'s payer funds the SwapDvp PDA and both escrow ATAs but isn't recorded as a rent recipient. On close those lamports go to the closing party: the settlement authority on `Settle`/`Cancel`, the rejecting `user_a`/`user_b` on `Reject`. If payer and closer differ, the payer subsidizes the closer.
 - **Expiry.** Only `Settle` rejects after `expiry_timestamp`. `Reclaim`, `Cancel`, and `Reject` always work — otherwise an expired-but-funded DvP would strand funds. Reclaim is per-leg recovery: each party can pull their own leg back at any time, so a problem with the counterparty's leg can't lock a healthy leg behind the all-or-nothing Cancel/Reject path. Funding via raw SPL Transfer is unauthenticated by the program; clients must avoid funding past expiry, but any tokens that do land are still recoverable via Reclaim/Cancel/Reject.
 - **Earliest settlement.** If `earliest_settlement_timestamp` is set, `Settle` additionally rejects when `now < earliest`.
@@ -97,8 +132,8 @@ PDA seeds: `[b"dvp", settlement_authority, user_a, user_b, mint_a, mint_b, nonce
 
 - **`CreateDvp` is permissionless — a record is not proof of agreement.** Only the payer signs; `user_a`, `user_b`, and `settlement_authority` do not. So anyone can create a `SwapDvp` for any parties with arbitrary terms (any non-zero amounts, any future expiry). The economic terms are stored in the account but are **not** part of the PDA seeds, so the address doesn't bind them. Two consequences clients must handle:
   - **Use a cryptographically random 64-bit `nonce` per trade.** A predictable nonce lets a third party squat the intended slot (and, after the real parties reject it, the tombstone burns that nonce — so they'd need a fresh one anyway). Random nonces make squatting/DoS impractical. In TypeScript, always pass the nonce (and 64-bit amounts) as a `bigint`: it is a PDA seed, and a plain `number` above 2^53 rounds and would derive the wrong address. The generated instruction builders and `findSwapDvpPda` reject a `number` at runtime.
-  - **Verify stored terms before acting.** Funders must read the on-chain `SwapDvp` and check `amount_a`/`amount_b`/`expiry`/`earliest`/`user_a`/`user_b`/`settlement_authority`/`user_a_settlement_destination`/`user_b_settlement_destination` against the agreed deal — a forged create with attacker destinations would redirect settlement proceeds — _before_ depositing (escrow addresses derive only from PDA+mint, never from terms, so a raw transfer can land against terms you never agreed to). The `settlement_authority` must re-validate before `Settle`. Verification must also confirm the account is owned by the DvP program and is exactly `SwapDvp::LEN` (458) bytes; otherwise an attacker can serialize look-alike terms into a wallet-owned account and drain the escrow ATA you fund. The generated `fetch`/`decode` readers check neither, so use the checked helpers: `verifySwapDvp` / `decodeSwapDvpChecked` / `findSwapDvpPda` / `findSwapDvpEscrowAta` (TypeScript) or `verify::decode_swap_dvp_account` / `verify::find_swap_dvp_address` / `verify::find_swap_dvp_escrow_ata` (Rust).
-- **Token-2022.** Each leg carries its own `token_program` account, so a single DvP can mix legacy SPL and Token-2022 mints. `CreateDvp` rejects mints carrying amount-mutating extensions (`TransferFee`, `InterestBearing`, `ScaledUiAmount`), and `NonTransferable` (a balance reaching the escrow could never be drained, stranding both legs). `SettleDvp` re-runs the same check and also requires each mint to still be owned by the token program and to carry the same mint authority captured at Create, so a leg recreated after Create (see the close-authority note below) with a deny-listed extension, under the other token program, or with a fresh mint authority can't reach a counterfeit or short "successful" settlement. The recovery paths (`Cancel`/`Reject`/`Reclaim`/`Recover`) skip both checks so the program never blocks recovery when a mint changes later, but the token program's own transfer rules still apply: a mint recreated as `NonTransferable` (unmovable) or with a transfer fee (net payout) after Create is the trusted-authority exception, same as the other close/mint-authority risks below. `PermanentDelegate`, `Pausable`, `MintCloseAuthority`, `DefaultAccountState`, `ConfidentialTransfer`, `ConfidentialTransferFeeConfig`, and a mint freeze authority are accepted as-is. `ConfidentialTransfer` doesn't force confidential transfers, and the escrow can't be configured to receive one (that needs the SwapDvp PDA to sign `ConfigureAccount`), so legs settle on exact public amounts — and the `ConfidentialTransferFeeConfig` fee applies only to confidential transfers, which therefore can't occur. These are all trusted-authority risks the program cannot defend against: a permanent delegate can move escrowed tokens, a freeze authority can freeze the escrow ATA (or a frozen `DefaultAccountState` can make new ATAs start frozen), a pause authority can halt transfers, and a close authority can close a zero-supply mint and recreate it at the same address with a different extension set, under the other token program, or with a fresh mint authority, changing transfer behavior mid-trade (Settle re-validates mint ownership, extensions, and mint authority so this can't force a counterfeit or short settlement, but a hostile recreation blocks Settle until the trade is unwound via Reject/Reclaim). Any of these can stall settlement or refunds until the authority cooperates. Treat the mint, freeze, and close authorities as trusted parties for the DvP's lifetime, and surface them in settlement UIs rather than presenting such mints as ordinary SPL tokens.
+  - **Verify stored terms before acting.** Funders must read the on-chain `SwapDvp` and check `amount_a`/`amount_b`/`expiry`/`earliest`/`user_a`/`user_b`/`settlement_authority`/`user_a_settlement_destination`/`user_b_settlement_destination` against the agreed deal — a forged create with attacker destinations would redirect settlement proceeds — _before_ depositing (escrow addresses derive only from PDA+mint, never from terms, so a raw transfer can land against terms you never agreed to). The `settlement_authority` must re-validate before `Settle`. For public mode, verification must also confirm the account is owned by the DvP program and is exactly `SwapDvp::LEN` (458) bytes; otherwise an attacker can serialize look-alike terms into a wallet-owned account and drain the escrow ATA you fund. The generated `fetch`/`decode` readers check the size but not the owner, so use the checked helpers: `verifySwapDvp` / `decodeSwapDvpChecked` / `findSwapDvpPda` / `findSwapDvpEscrowAta` (TypeScript) or `verify::decode_swap_dvp_account` / `verify::find_swap_dvp_address` / `verify::find_swap_dvp_escrow_ata` (Rust).
+- **Token-2022.** Each leg carries its own `token_program` account, so a single DvP can mix legacy SPL and Token-2022 mints. `CreateDvp` rejects mints carrying amount-mutating extensions (`TransferFee`, `InterestBearing`, `ScaledUiAmount`), and `NonTransferable` (a balance reaching the escrow could never be drained, stranding both legs). `SettleDvp` re-runs the same check and also requires each mint to still be owned by the token program and to carry the same mint authority captured at Create, so a leg recreated after Create (see the close-authority note below) with a deny-listed extension, under the other token program, or with a fresh mint authority can't reach a counterfeit or short "successful" settlement. The recovery paths (`Cancel`/`Reject`/`Reclaim`/`Recover`) skip both checks so the program never blocks recovery when a mint changes later, but the token program's own transfer rules still apply: a mint recreated as `NonTransferable` (unmovable) or with a transfer fee (net payout) after Create is the trusted-authority exception, same as the other close/mint-authority risks below. `PermanentDelegate`, `Pausable`, `MintCloseAuthority`, `DefaultAccountState`, `ConfidentialTransfer`, `ConfidentialTransferFeeConfig`, and a mint freeze authority are accepted as-is. `ConfidentialTransfer` doesn't force confidential transfers, and public DvP instructions never configure their escrows to receive one, so public legs settle on exact public amounts and incur no `ConfidentialTransferFeeConfig` fee. `CreateConfidentialDvp` configures leg B for confidential transfers and rejects confidential transfer fees. These are all trusted-authority risks the program cannot defend against: a permanent delegate can move escrowed tokens, a freeze authority can freeze the escrow ATA (or a frozen `DefaultAccountState` can make new ATAs start frozen), a pause authority can halt transfers, and a close authority can close a zero-supply mint and recreate it at the same address with a different extension set, under the other token program, or with a fresh mint authority, changing transfer behavior mid-trade (Settle re-validates mint ownership, extensions, and mint authority so this can't force a counterfeit or short settlement, but a hostile recreation blocks Settle; an unaffected leg can still be reclaimed, while refunds of an affected non-zero balance remain subject to the token program's transfer rules). Any of these can stall settlement or refunds until the authority cooperates. Treat the mint, freeze, and close authorities as trusted parties for the DvP's lifetime, and surface them in settlement UIs rather than presenting such mints as ordinary SPL tokens.
 - **TransferHook.** Settle/Cancel/Reject/Reclaim/Recover issue `TransferChecked` CPIs and forward any trailing accounts to the token program as transfer-hook extras. Settle/Cancel/Reject split the trailing slice between the two legs via the `leg_a_extras_count: u8` data field (first `leg_a_extras_count` accounts go to leg A, rest to leg B); Reclaim and Recover have a single leg so all trailing accounts feed their one CPI. The client must resolve the hook's `ExtraAccountMetaList` off-chain. Note the generated IDL describes only the fixed accounts, not these trailing hook accounts (codama-derive drops instruction-level remaining accounts), so clients, indexers, and transaction builders must add them per this section rather than relying on the IDL's account list alone. Hook extras are capped at 32 accounts per leg (the CPI account arrays are stack-allocated). A mutable hook is a trusted-authority risk: the hook authority can update the `ExtraAccountMetaList` after funding to require more than the cap, which bricks every terminal transfer on that leg until the authority relents. Treat mutable-hook mints as trusted and surface this in client risk checks before funding. The program strips the signer bit from every forwarded hook extra (keeping only its writable flag), so a malicious hook mint that names a transaction signer, e.g. the settlement authority, as a static extra can never receive that signature: the hook sees the account writable-or-readonly but never as a signer, so it cannot sign transfers out of that wallet. The DvP PDA transfer authority is likewise safe (Token-2022 passes it to the hook read-only). Clients should still avoid passing unrelated writable accounts as hook extras.
 - **User ATAs are caller-managed.** The program creates escrow ATAs at `CreateDvp` but never creates user-side ATAs. Settle/Cancel/Reject/Reclaim assume the user destination ATAs already exist for any leg whose balance will be transferred; uninitialized destinations cause the `TransferChecked` CPI to fail and revert the instruction. Callers should add `CreateIdempotent` pre-instructions as needed. For `SettleDvp` this means **all four** recipient ATAs: the two that receive the agreed amounts (`user_a_destination_ata_b`, `user_b_destination_ata_a` — the settlement destinations' ATAs, defaulting to the users') and the two surplus-refund ATAs (`user_a_ata_a`, `user_b_ata_b`). The surplus ATAs are not optional — anyone can dust an escrow, which forces a surplus refund, so a missing one reverts the whole settlement.
 - **TransferHook + over-deposit caveat.** When Settle refunds a surplus, it issues a second `TransferChecked` CPI on the same mint with a different destination (the depositor's own ATA) and amount, but reuses the leg's extras slice. For hooks whose `ExtraAccountMetaList` resolves any account from the transfer's destination or amount (a valid but uncommon pattern), the surplus CPI will fail and revert Settle. Recovery: the depositor calls `Reclaim` to drain the leg, re-funds exactly `amount_x`, then Settle succeeds. Funds are never lost; only the over-deposit path is affected. Clients should fund hook-bearing escrows at exactly `amount_x` and warn on any surplus.
@@ -116,8 +151,8 @@ PDA seeds: `[b"dvp", settlement_authority, user_a, user_b, mint_a, mint_b, nonce
 | 6    | `EarliestAfterExpiry`            | Create with `earliest > expiry`                                                                                                 |
 | 7    | `SelfDvp`                        | Create with `user_a == user_b`                                                                                                  |
 | 8    | `SameMint`                       | Create with `mint_a == mint_b`                                                                                                  |
-| 9    | `ZeroAmount`                     | Create with `amount_a == 0` or `amount_b == 0`                                                                                  |
-| 10   | `BlockedMintExtension`           | Create with a Token-2022 mint carrying an unsupported extension (TransferFee, InterestBearing, ScaledUiAmount, NonTransferable) |
+| 9    | `ZeroAmount`                     | Create with `amount_a == 0`, or public Create with `amount_b == 0`                                                              |
+| 10   | `BlockedMintExtension`           | Create or Settle with an unsupported mint extension; confidential B also rejects confidential transfer fees |
 | 11   | `SettlementAuthorityIsParty`     | Create with `settlement_authority` equal to `user_a` or `user_b`                                                                |
 | 12   | `SettlementAuthorityExecutable`  | Create with an executable `settlement_authority` (can't be credited closed-account rent)                                        |
 | 13   | `NonceAlreadyUsed`               | Create reusing a `(seeds, nonce)` that already has a nonce tombstone (the address was used by a prior DvP)                      |
@@ -132,39 +167,67 @@ PDA seeds: `[b"dvp", settlement_authority, user_a, user_b, mint_a, mint_b, nonce
 | 22   | `PartyNotSignerCapable`          | Create with `user_a` or `user_b` that is not a system-owned, non-executable account                                             |
 | 23   | `MintAuthorityChanged`           | Settle when a leg's mint authority no longer matches the value captured at Create                                               |
 
+Confidential mode adds the following codes; codes 0-23 retain their numbering.
+
+| Code | Variant | When |
+| --- | --- | --- |
+| 24 | `SwapModeMismatch` | Instruction and swap/escrow mode disagree |
+| 25 | `MintNotConfidential` | Leg B mint lacks CT support |
+| 26 | `EscrowPublicBalanceNotEmpty` | Public B balance exists at confidential Create |
+| 27 | `EscrowNotConfidential` | Required escrow CT state is absent |
+| 28 | `InvalidProofContext` | Wrong proof owner, length or type |
+| 29 | `ProofContextAuthorityMismatch` | Proof authority differs from the signer |
+| 30 | `ConfidentialAmountBMismatch` | Payment is not bound to the agreed ciphertexts |
+| 31 | `RecipientNotConfidential` | Recipient lacks CT state |
+| 32 | `RecipientNotApproved` | Recipient lacks CT approval |
+| 33 | `RecipientConfidentialCreditsDisabled` | Recipient rejects confidential credits |
+| 34 | `RecipientPendingCounterFull` | Recipient cannot accept another credit |
+| 35 | `EscrowBalanceNotZero` | Available balance does not match the zero proof |
+| 36 | `LegBRefundRequired` | `None` refund selected while available B is not all-zero bytes |
+
 ## Build & test
 
 ```sh
 make build              # generate clients + cargo-build-sbf
-make unit-test          # program crate's #[cfg(test)] modules + JS client tests
-make integration-test   # build + LiteSVM integration tests
+make unit-test          # program and Rust client unit tests
+make integration-test   # build + Rust integration and all TypeScript client tests
 make fmt                # cargo fmt + clippy + pnpm format
 make verify-program-id  # pre-deploy: deploy keypair matches the declared program ID
 ```
+
+Run `make fetch-test-fixtures` once before integration tests. External Token-2022
+and SPL Record binaries are pinned by SHA-256; see [test fixtures](tests/fixtures/README.md).
+Host tests use Rust 1.93.1 and LiteSVM 0.16 (Agave 4.2).
 
 The integration tests live in `tests/integration-tests/` and run against the compiled `.so` via [LiteSVM](https://github.com/LiteSVM/litesvm). See `tests/integration-tests/src/` for one directory per instruction.
 
 ### Deploying
 
-The address in `declare_id!` (and therefore the IDL and generated clients) is a temporary placeholder. Its keypair is not available, so the program has not been deployed to it and that ID is not the program's real address. A real deployment must:
+The program is deployed on mainnet at
+`dvp34bdbcEm4f4FCUjGV4mDAkDshaQR4LkK8fdcsyZq`, the address in `declare_id!`,
+the IDL and the generated clients. The confidential extension is intended as
+an in-place upgrade under the existing upgrade authority; retain this program id.
 
-1. Generate a fresh program keypair (`solana-keygen new -o target/deploy/dvp_swap_program-keypair.json`).
-2. Set `declare_id!` to its pubkey and regenerate the IDL and clients (`make build`).
-3. Run `make verify-program-id` to confirm the deploy keypair matches the declared ID.
-4. `solana program deploy --program-id target/deploy/dvp_swap_program-keypair.json target/deploy/dvp_swap_program.so`.
-
-`cargo-build-sbf` writes a random deploy keypair that does not match `declare_id!`, so deploying without these steps (or without an explicit `--program-id`) publishes to the wrong address.
+Before upgrading, pin the deployed release baseline and validate compatibility
+and rollback as described in the [specification](docs/confidential_transfers/spec.md#11-release-compatibility).
+A locally generated `target/deploy/dvp_swap_program-keypair.json` is not evidence
+of the deployed program's identity. Target the existing program address
+explicitly; do not replace `declare_id!` with a fresh build keypair's address.
 
 ## Layout
 
 ```
 program/         on-chain program (no_std, pinocchio-based)
-clients/rust/    Codama-generated Rust client
-clients/typescript/  Codama-generated TypeScript client
+clients/rust/    generated builders + handwritten verification and confidential client
+clients/typescript/  generated builders + handwritten verification and confidential client
 idl/             generated Codama IDL
 tests/integration-tests/   LiteSVM integration tests
 ```
 
 ## Audit
 
-This program has been audited by [Cantina](https://cantina.xyz/portfolio/fe870bb4-d96d-4902-8aec-9dfcfa2d6a79).
+An earlier version of the program was audited by [Cantina](https://cantina.xyz/portfolio/fe870bb4-d96d-4902-8aec-9dfcfa2d6a79).
+
+The confidential extension is built on `main` at
+[`df9919e`](https://github.com/solana-foundation/dvp/commit/df9919ed02c25a93620e7f6820107c9050ce3b92).
+It and its client changes require a separate external review; the earlier audit is not evidence of their coverage.

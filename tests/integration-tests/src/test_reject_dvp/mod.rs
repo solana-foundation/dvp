@@ -1,10 +1,9 @@
 use dvp_swap_program_client::instructions::{CreateDvpBuilder, RejectDvpBuilder};
-use solana_program::pubkey;
-use solana_sdk::{
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-};
-use spl_token_2022::instruction::transfer_checked;
+use solana_keypair::Keypair;
+use solana_pubkey::pubkey;
+use solana_pubkey::Pubkey;
+use solana_signer::Signer;
+use spl_token_2022_interface::instruction::transfer_checked;
 
 use crate::{
     state_utils::{
@@ -17,7 +16,7 @@ use crate::{
         TestContext, MEMO_PROGRAM_ID, NATIVE_MINT, SIGNER_NOT_PARTY, TOKEN_PROGRAM_ID,
     },
 };
-use spl_associated_token_account::get_associated_token_address_with_program_id;
+use spl_associated_token_account_interface::address::get_associated_token_address_with_program_id;
 
 #[test]
 fn test_reject_dvp_success_signed_by_user_b() {

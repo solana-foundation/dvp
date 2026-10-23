@@ -73,7 +73,7 @@ pub fn process_reclaim_dvp(
 
     let dvp = {
         let data = swap_dvp_info.try_borrow()?;
-        SwapDvp::try_from_bytes(&data)?
+        SwapDvp::load(&data)?
     };
 
     // Leg selection by signer identity.

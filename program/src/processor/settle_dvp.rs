@@ -92,7 +92,7 @@ pub fn process_settle_dvp(
 
     let dvp = {
         let data = swap_dvp_info.try_borrow()?;
-        SwapDvp::try_from_bytes(&data)?
+        SwapDvp::load(&data)?
     };
 
     require!(
