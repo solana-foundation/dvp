@@ -4,7 +4,8 @@
  * `earliestSettlementTimestamp` always occupies 1 tag byte + 8 payload
  * bytes (the payload after a `0` tag is an ignored sentinel).
  */
-import { describe, expect, it } from "@jest/globals";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { getAddressDecoder, type ReadonlyUint8Array } from "@solana/kit";
 import {
   getSwapDvpDecoder,
@@ -83,26 +84,26 @@ const baseArgs = {
 describe("SwapDvp account codec", () => {
   it("rejects the 450-byte short-None forgery", () => {
     const forged = shortForgedBytes();
-    expect(forged.length).toBe(450);
-    expect(() => decode(forged)).toThrow();
+    assert.equal(forged.length, 450);
+    assert.throws(() => decode(forged));
   });
 
   it("decodes the genuine on-chain None encoding (tag 0 + sentinel)", () => {
     const bytes = onChainBytes();
-    expect(bytes.length).toBe(SWAP_DVP_ACCOUNT_SIZE);
+    assert.equal(bytes.length, SWAP_DVP_ACCOUNT_SIZE);
     const decoded = decode(bytes);
-    expect(decoded.earliestSettlementTimestamp).toEqual({ __option: "None" });
-    expect(decoded.userA).toBe(addressOf(1));
-    expect(decoded.settlementAuthority).toBe(addressOf(5));
-    expect(decoded.amountA).toBe(1_000n);
-    expect(decoded.amountB).toBe(2_500n);
-    expect(decoded.nonce).toBe(42n);
-    expect(decoded.userBSettlementDestination).toBe(addressOf(10));
+    assert.deepEqual(decoded.earliestSettlementTimestamp, { __option: "None" });
+    assert.equal(decoded.userA, addressOf(1));
+    assert.equal(decoded.settlementAuthority, addressOf(5));
+    assert.equal(decoded.amountA, 1_000n);
+    assert.equal(decoded.amountB, 2_500n);
+    assert.equal(decoded.nonce, 42n);
+    assert.equal(decoded.userBSettlementDestination, addressOf(10));
   });
 
   it("decodes the genuine on-chain Some encoding", () => {
     const decoded = decode(onChainBytes(1_770_000_000n));
-    expect(decoded.earliestSettlementTimestamp).toEqual({
+    assert.deepEqual(decoded.earliestSettlementTimestamp, {
       __option: "Some",
       value: 1_770_000_000n,
     });
@@ -118,8 +119,8 @@ describe("SwapDvp account codec", () => {
       ...baseArgs,
       earliestSettlementTimestamp: 1_770_000_000n,
     });
-    expect(noneBytes.length).toBe(SWAP_DVP_ACCOUNT_SIZE);
-    expect(someBytes.length).toBe(SWAP_DVP_ACCOUNT_SIZE);
+    assert.equal(noneBytes.length, SWAP_DVP_ACCOUNT_SIZE);
+    assert.equal(someBytes.length, SWAP_DVP_ACCOUNT_SIZE);
   });
 
   it("round-trips Some through encode/decode", () => {
@@ -128,7 +129,7 @@ describe("SwapDvp account codec", () => {
       earliestSettlementTimestamp: 1_770_000_000n,
     });
     const decoded = decode(encoded);
-    expect(decoded).toMatchObject({
+    assert.deepEqual(decoded, {
       ...baseArgs,
       earliestSettlementTimestamp: { __option: "Some", value: 1_770_000_000n },
     });
@@ -138,12 +139,14 @@ describe("SwapDvp account codec", () => {
   // before encoding. The encoder must reject number, not round it.
   it("rejects a plain number for a 64-bit field instead of rounding it", () => {
     const encoder = getSwapDvpEncoder();
-    expect(() =>
-      encoder.encode({
-        ...baseArgs,
-        amountA: (2 ** 53 + 1) as unknown as bigint,
-        earliestSettlementTimestamp: null,
-      }),
-    ).toThrow(/bigint/i);
+    assert.throws(
+      () =>
+        encoder.encode({
+          ...baseArgs,
+          amountA: (2 ** 53 + 1) as unknown as bigint,
+          earliestSettlementTimestamp: null,
+        }),
+      /bigint/i,
+    );
   });
 });

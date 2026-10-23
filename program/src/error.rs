@@ -46,12 +46,11 @@ pub enum DvpSwapProgramError {
     #[error("DvP leg amounts must be non-zero")]
     ZeroAmount,
 
-    /// (10) Mint carries a Token-2022 extension the swap program refuses
-    /// to support (transfer fee, interest bearing, scaled UI amount,
-    /// non-transferable). A confidential transfer fee config is also
-    /// rejected, but only implicitly: it always co-occurs with a transfer
-    /// fee config, which the explicit check already blocks.
-    /// Checked only at CreateDvp.
+    /// (10) Mint carries NonTransferable or a non-zero transfer-fee
+    /// basis-point rate. CreateDvp checks active and scheduled rates;
+    /// SettleDvp checks only the active rate. Confidential leg B also
+    /// rejects any TransferFeeConfig at CreateConfidentialDvp.
+    /// Recovery instructions skip this validation.
     #[error("Mint carries an unsupported Token-2022 extension")]
     BlockedMintExtension,
 
@@ -130,6 +129,59 @@ pub enum DvpSwapProgramError {
     /// CreateDvp. Checked only at SettleDvp.
     #[error("mint authority changed since DvP creation")]
     MintAuthorityChanged,
+    /// (24) Instruction does not match the swap mode.
+    #[error("Instruction does not match the swap mode")]
+    SwapModeMismatch,
+
+    /// (25) Mint does not support confidential transfers.
+    #[error("Mint does not support confidential transfers")]
+    MintNotConfidential,
+
+    /// (26) Escrow public balance must be empty at creation.
+    #[error("Escrow public balance must be empty at creation")]
+    EscrowPublicBalanceNotEmpty,
+
+    /// (27) Escrow does not have confidential transfer state.
+    #[error("Escrow does not have confidential transfer state")]
+    EscrowNotConfidential,
+
+    /// (28) Proof context owner, length or type is invalid.
+    #[error("Proof context owner, length or type is invalid")]
+    InvalidProofContext,
+
+    /// (29) Proof context authority does not match the signer.
+    #[error("Proof context authority does not match the signer")]
+    ProofContextAuthorityMismatch,
+
+    /// (30) Confidential payment does not match the agreed amount.
+    #[error("Confidential payment does not match the agreed amount")]
+    #[codama(name = "confidential_amount_b_mismatch")]
+    ConfidentialAmountBMismatch,
+
+    /// (31) Recipient does not have confidential transfer state.
+    #[error("Recipient does not have confidential transfer state")]
+    RecipientNotConfidential,
+
+    /// (32) Recipient is not approved for confidential transfers.
+    #[error("Recipient is not approved for confidential transfers")]
+    RecipientNotApproved,
+
+    /// (33) Recipient does not accept confidential credits.
+    #[error("Recipient does not accept confidential credits")]
+    RecipientConfidentialCreditsDisabled,
+
+    /// (34) Recipient pending credit counter is full.
+    #[error("Recipient pending credit counter is full")]
+    RecipientPendingCounterFull,
+
+    /// (35) Escrow available balance does not match the zero proof.
+    #[error("Escrow available balance does not match the zero proof")]
+    EscrowBalanceNotZero,
+
+    /// (36) A confidential refund is required for leg B.
+    #[error("A confidential refund is required for leg B")]
+    #[codama(name = "leg_b_refund_required")]
+    LegBRefundRequired,
 }
 
 impl From<DvpSwapProgramError> for ProgramError {

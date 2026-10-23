@@ -42,13 +42,12 @@ const FIXED_ACCOUNTS_LEN: usize = 13;
 /// Mint ownership and extensions are **re-validated** here. Create is
 /// the consent point, but a leg left unfunded until the counterparty
 /// commits can be closed (zero supply) and recreated at the same address
-/// under the other token program or with a deny-listed extension (e.g.
-/// `TransferFee`), either of which would deliver a counterfeit or short
-/// leg while settlement still reported success. Re-checking binds Settle
-/// to the same guarantees Create enforced. This does not strand funds:
-/// if a mint mutated out from under the agreement, Settle rejects and
-/// the honest party recovers via Reject/Reclaim, which stay tolerant so
-/// a leg is never locked.
+/// under the other token program or with a blocked extension, either of
+/// which could invalidate settlement. The active transfer-fee rate must
+/// still be zero; a future increase does not block settlement until it
+/// activates. Recovery skips this validation but follows the token program's
+/// transfer rules, including any active fee. Existing withheld escrow fees
+/// must be harvested by a client pre-instruction before closing the escrow.
 ///
 /// # Account Layout
 /// 0.  `[signer, writable]` settlement_authority - Must equal `dvp.settlement_authority`; receives closed-account rent
@@ -92,7 +91,7 @@ pub fn process_settle_dvp(
 
     let dvp = {
         let data = swap_dvp_info.try_borrow()?;
-        SwapDvp::try_from_bytes(&data)?
+        SwapDvp::load(&data)?
     };
 
     require!(
@@ -122,11 +121,11 @@ pub fn process_settle_dvp(
         ProgramError::InvalidAccountOwner
     );
 
-    // Re-check both mints against the Create deny-list: a leg recreated
-    // with a blocked extension (e.g. TransferFee) after Create must not
-    // reach a "successful" short settlement. Recovery paths stay tolerant.
-    validate_mint_extensions(mint_a_info)?;
-    validate_mint_extensions(mint_b_info)?;
+    // Re-check blocked extensions and the active transfer-fee rate. A scheduled
+    // increase may still be pending; settle at zero rate until it activates.
+    let clock = Clock::get()?;
+    validate_mint_extensions(mint_a_info, clock.epoch, false)?;
+    validate_mint_extensions(mint_b_info, clock.epoch, false)?;
 
     // Pin each mint's authority to the value captured at Create. A mint
     // recreated under the same program with a fresh authority passes the
@@ -139,7 +138,7 @@ pub fn process_settle_dvp(
         DvpSwapProgramError::MintAuthorityChanged
     );
 
-    let now = Clock::get()?.unix_timestamp;
+    let now = clock.unix_timestamp;
     require!(now <= dvp.expiry_timestamp, DvpSwapProgramError::DvpExpired);
     if let Some(earliest) = dvp.earliest_settlement_timestamp {
         require!(now >= earliest, DvpSwapProgramError::SettlementTooEarly);

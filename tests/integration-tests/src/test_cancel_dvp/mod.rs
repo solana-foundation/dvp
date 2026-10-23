@@ -1,5 +1,6 @@
 use dvp_swap_program_client::instructions::{CancelDvpBuilder, CreateDvpBuilder};
-use solana_sdk::signature::{Keypair, Signer};
+use solana_keypair::Keypair;
+use solana_signer::Signer;
 
 use crate::{
     state_utils::{

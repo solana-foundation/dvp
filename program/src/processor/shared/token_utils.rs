@@ -16,8 +16,7 @@ use pinocchio_token_2022::{
     state::TokenAccount as Token2022Account, ID as TOKEN_2022_PROGRAM_ID,
 };
 use spl_token_2022::extension::{
-    interest_bearing_mint::InterestBearingConfig, memo_transfer::memo_required,
-    non_transferable::NonTransferable, scaled_ui_amount::ScaledUiAmountConfig,
+    memo_transfer::memo_required, non_transferable::NonTransferable,
     transfer_fee::TransferFeeConfig, BaseStateWithExtensions, StateWithExtensions,
 };
 use spl_token_2022::state::{Account as Token2022AccountState, Mint as Token2022MintState};
@@ -275,25 +274,25 @@ pub fn get_mint_authority(mint_info: &AccountView) -> Result<Option<Address>, Pr
     Err(ProgramError::InvalidAccountOwner)
 }
 
-/// Reject Token-2022 mints carrying either:
-/// - an amount-mutating extension that silently breaks the "escrow
-///   balance == sum of deposits" invariant (`TransferFee`,
-///   `InterestBearing`, `ScaledUiAmount`): the credited amount drifts
-///   from the debited amount, so the program would settle
-///   "successfully" while a leg comes up short; or
-/// - `NonTransferable`, which permanently blocks transfers out of the
-///   escrow. Unlike everything else this never recovers — if a balance
-///   reaches the escrow (e.g. the authority mints straight to it), no
-///   settle/refund/reclaim can drain it, stranding both legs.
+/// Validate the public DvP mint-extension policy.
+/// `NonTransferable` is blocked: a balance that reaches the escrow (e.g. the
+/// authority mints straight to it) can never be transferred out, stranding
+/// both legs.
+/// `TransferFeeConfig` is allowed only when the active basis-point rate is
+/// zero, regardless of the maximum fee. Create passes `check_scheduled_fee`
+/// to also reject a scheduled non-zero rate; Settle checks only the active
+/// rate so existing trades can finish before a fee increase takes effect.
 ///
+/// `InterestBearing` and `ScaledUiAmount` only change UI conversions.
+/// Deposits, balances and DvP terms remain in unchanged base units.
 /// Everything else is allowed, including `Pausable`, `PermanentDelegate`,
 /// `DefaultAccountState`, `TransferHook`, `ConfidentialTransfer`, etc.
 /// `ConfidentialTransfer` on the mint doesn't force confidential
-/// transfers — the public `TransferChecked` path keeps exact amounts —
-/// and the escrow can never receive a confidential deposit because
-/// configuring its `ConfidentialTransferAccount` extension would need
-/// the SwapDvp PDA to sign `ConfigureAccount`. These fail *loudly*
-/// (reverted CPI, atomic rollback) rather than silently — funds stay in
+/// transfers. The public `TransferChecked` path keeps exact amounts.
+/// Public DvP escrows cannot receive confidential deposits because public
+/// instructions never sign `ConfigureAccount` with the SwapDvp PDA.
+/// `CreateConfidentialDvp` does configure leg B for confidential deposits.
+/// Blocking extensions fail *loudly* (reverted CPI, atomic rollback); funds stay in
 /// escrow and recover once the blocking condition lifts.
 /// `PermanentDelegate` is a deliberate carve-out for regulated RWA tokens
 /// (issuer/transfer-agent clawback is an intrinsic property of the asset).
@@ -307,20 +306,25 @@ pub fn get_mint_authority(mint_info: &AccountView) -> Result<Option<Address>, Pr
 /// to error unconditionally, and a `MintCloseAuthority` can close a
 /// zero-supply mint and recreate it at the same address with a
 /// different extension set. Settle re-runs this check so a leg recreated
-/// with a deny-listed extension (e.g. a transfer fee) can't reach a
+/// with a blocked extension or a non-zero transfer fee can't reach a
 /// short "successful" settlement, and additionally rebinds each mint to
 /// its stored token program so a recreation under the other token
-/// program can't settle either; the recovery paths stay tolerant so
-/// funds are never stranded. Traders are still expected to vet the mints
+/// program can't settle either. Recovery skips this validation but still
+/// follows the token program's transfer rules. Traders must vet the mints
 /// they agree to transact in; mint-authority trust is not a problem the
 /// program can solve.
 ///
-/// Called at CreateDvp and SettleDvp. The recovery paths (Cancel,
-/// Reject, Reclaim, Recover) skip this check so funds remain recoverable
-/// if extension parameters change post-Create.
+/// Called at CreateDvp and SettleDvp. Recovery instructions skip this check:
+/// refunds can incur fees after a rate increase. If an escrow holds withheld
+/// fees, clients must prepend HarvestWithheldTokensToMint before an instruction
+/// that closes it, even if the current rate has since returned to zero.
 /// Legacy SPL Token mints only get a mint-size check.
 #[inline(always)]
-pub fn validate_mint_extensions(mint_info: &AccountView) -> ProgramResult {
+pub fn validate_mint_extensions(
+    mint_info: &AccountView,
+    epoch: u64,
+    check_scheduled_fee: bool,
+) -> ProgramResult {
     if !mint_info.owned_by(&TOKEN_2022_PROGRAM_ID) {
         // Legacy SPL Token mint: no extensions, but confirm it's a real
         // mint (exact size) rather than trusting the owner check alone.
@@ -336,12 +340,22 @@ pub fn validate_mint_extensions(mint_info: &AccountView) -> ProgramResult {
     let mint = StateWithExtensions::<Token2022MintState>::unpack(&data)
         .map_err(|_| ProgramError::InvalidAccountData)?;
 
-    if mint.get_extension::<TransferFeeConfig>().is_ok()
-        || mint.get_extension::<InterestBearingConfig>().is_ok()
-        || mint.get_extension::<ScaledUiAmountConfig>().is_ok()
-        || mint.get_extension::<NonTransferable>().is_ok()
-    {
+    if mint.get_extension::<NonTransferable>().is_ok() {
         return Err(DvpSwapProgramError::BlockedMintExtension.into());
+    }
+
+    if let Ok(config) = mint.get_extension::<TransferFeeConfig>() {
+        let active_rate = u16::from(config.get_epoch_fee(epoch).transfer_fee_basis_points);
+        // Once newer_transfer_fee is active, older_transfer_fee is historical.
+        // Only Create rejects a future increase; Settle can finish at zero rate
+        // until the scheduled fee activates.
+        let scheduled_nonzero = check_scheduled_fee
+            && u64::from(config.newer_transfer_fee.epoch) > epoch
+            && u16::from(config.newer_transfer_fee.transfer_fee_basis_points) != 0;
+        require!(
+            active_rate == 0 && !scheduled_nonzero,
+            DvpSwapProgramError::BlockedMintExtension
+        );
     }
 
     Ok(())
@@ -381,7 +395,7 @@ pub fn requires_memo(to: &AccountView) -> Result<bool, ProgramError> {
 /// passed account only here — callers without a memo destination can pass
 /// any account in the slot.
 #[inline(always)]
-fn invoke_memo(memo_program: &AccountView) -> ProgramResult {
+pub fn invoke_memo(memo_program: &AccountView) -> ProgramResult {
     require!(
         memo_program.address() == &MEMO_PROGRAM_ID,
         ProgramError::IncorrectProgramId

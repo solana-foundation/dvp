@@ -3,8 +3,11 @@ use pinocchio::{account::AccountView, entrypoint, error::ProgramError, Address, 
 use crate::{
     discriminator::DvpSwapInstructionDiscriminators,
     processor::{
-        process_cancel_dvp, process_create_dvp, process_reclaim_dvp, process_recover_dvp,
-        process_reject_dvp, process_settle_dvp,
+        process_apply_confidential_dvp, process_cancel_confidential_dvp, process_cancel_dvp,
+        process_create_confidential_dvp, process_create_dvp, process_reclaim_confidential_dvp,
+        process_reclaim_dvp, process_recover_confidential_dvp, process_recover_dvp,
+        process_reject_confidential_dvp, process_reject_dvp, process_settle_confidential_dvp,
+        process_settle_dvp,
     },
 };
 
@@ -40,6 +43,27 @@ pub fn process_instruction(
         }
         DvpSwapInstructionDiscriminators::RecoverDvp => {
             process_recover_dvp(program_id, accounts, instruction_data)
+        }
+        DvpSwapInstructionDiscriminators::CreateConfidentialDvp => {
+            process_create_confidential_dvp(program_id, accounts, instruction_data)
+        }
+        DvpSwapInstructionDiscriminators::ReclaimConfidentialDvp => {
+            process_reclaim_confidential_dvp(program_id, accounts, instruction_data)
+        }
+        DvpSwapInstructionDiscriminators::SettleConfidentialDvp => {
+            process_settle_confidential_dvp(program_id, accounts, instruction_data)
+        }
+        DvpSwapInstructionDiscriminators::CancelConfidentialDvp => {
+            process_cancel_confidential_dvp(program_id, accounts, instruction_data)
+        }
+        DvpSwapInstructionDiscriminators::RejectConfidentialDvp => {
+            process_reject_confidential_dvp(program_id, accounts, instruction_data)
+        }
+        DvpSwapInstructionDiscriminators::RecoverConfidentialDvp => {
+            process_recover_confidential_dvp(program_id, accounts, instruction_data)
+        }
+        DvpSwapInstructionDiscriminators::ApplyConfidentialDvp => {
+            process_apply_confidential_dvp(program_id, accounts, instruction_data)
         }
     }
 }

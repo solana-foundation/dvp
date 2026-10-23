@@ -25,7 +25,7 @@ use pinocchio::{
 use pinocchio_associated_token_account::instructions::CreateIdempotent as CreateAtaIdempotent;
 
 /// Max DvP lifetime (one year) as a duration from creation. Caps escrow rent lock-up.
-const MAX_DVP_DURATION_SECS: i64 = 365 * 24 * 60 * 60;
+pub(super) const MAX_DVP_DURATION_SECS: i64 = 365 * 24 * 60 * 60;
 
 /// Processes the CreateDvp instruction.
 ///
@@ -104,10 +104,12 @@ pub fn process_create_dvp(
     verify_party_signer_capable(user_b_info)?;
     verify_account_owner(mint_a_info, token_program_a_info.address())?;
     verify_account_owner(mint_b_info, token_program_b_info.address())?;
-    validate_mint_extensions(mint_a_info)?;
-    validate_mint_extensions(mint_b_info)?;
+    // New trades require both active and scheduled transfer-fee rates to be zero.
+    let clock = Clock::get()?;
+    validate_mint_extensions(mint_a_info, clock.epoch, true)?;
+    validate_mint_extensions(mint_b_info, clock.epoch, true)?;
 
-    let now = Clock::get()?.unix_timestamp;
+    let now = clock.unix_timestamp;
     validate_args(
         &args,
         settlement_authority_info.address(),
@@ -421,7 +423,7 @@ fn parse_instruction_data(data: &[u8]) -> Result<CreateDvpArgs, ProgramError> {
 /// a smart-wallet PDA signing via CPI. An account owned by another
 /// program (e.g. an SPL Token multisig) or an executable can never sign,
 /// so a late deposit to its leg would be unrecoverable.
-fn verify_party_signer_capable(info: &AccountView) -> Result<(), ProgramError> {
+pub(super) fn verify_party_signer_capable(info: &AccountView) -> Result<(), ProgramError> {
     require!(
         info.owned_by(&pinocchio_system::ID) && !info.executable(),
         DvpSwapProgramError::PartyNotSignerCapable
