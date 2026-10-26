@@ -26,4 +26,4 @@ jobs:
           rust-cache-key: "rust-dev"
 
       - name: Build program and clients
-        run: make build
+        run: just build

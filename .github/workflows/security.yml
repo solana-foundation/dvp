@@ -23,6 +23,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           install-solana: "false"
+          install-just: "false"
           install-pnpm: "false"
           enable-rust-cache: "false"
       - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
@@ -39,6 +40,7 @@ jobs:
         with:
           install-rust: "false"
           install-solana: "false"
+          install-just: "false"
           install-pnpm-dependencies: "false"
       - run: pnpm audit --ignore-unfixable
 
@@ -52,6 +54,7 @@ jobs:
           rust-toolchain: "nightly"
           rust-components: "miri"
           install-solana: "false"
+          install-just: "false"
           install-pnpm: "false"
           rust-cache-key: "miri"
           save-rust-cache: "true"
