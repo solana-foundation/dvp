@@ -2,7 +2,7 @@ SHELL := /usr/bin/env bash
 .SHELLFLAGS := -euo pipefail -c
 .DEFAULT_GOAL := build
 
-.PHONY: install build build-hook-fixture build-smart-wallet-fixture fmt generate-idl generate-clients
+.PHONY: install build build-hook-fixture build-smart-wallet-fixture fmt fmt-check lint-check check-generated generate-idl generate-clients
 .PHONY: unit-test integration-test integration-test-no-build all-test
 .PHONY: unit-coverage coverage-html all-coverage verify-program-id
 
@@ -71,8 +71,25 @@ fmt:
 	@cd tests/integration-tests && cargo clippy --all-targets -- -D warnings
 	pnpm format
 
+fmt-check: generate-clients
+	cargo fmt --all --check
+	pnpm format:check
+
+# Clippy on integration-tests needs the .so files it include_bytes!.
+lint-check: build
+	cd program && cargo clippy --all-targets -- -D warnings
+	cd tests/integration-tests && cargo clippy --all-targets -- -D warnings
+
+check-generated: generate-idl
+	@if ! git diff --quiet -- idl || [[ -n "$$(git ls-files --others --exclude-standard -- idl)" ]]; then \
+		echo "Error: IDL is out of date. Run: make generate-idl"; \
+		git status --short -- idl; \
+		git diff -- idl; \
+		exit 1; \
+	fi
+
 # Unit tests: program crate's #[cfg(test)] modules + JS client tests.
-unit-test:
+unit-test: generate-clients
 	@echo "Running unit tests for swap program..."
 	pnpm test:unit
 	@cd program && cargo test
