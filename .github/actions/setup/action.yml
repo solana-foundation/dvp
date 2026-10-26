@@ -1,5 +1,5 @@
 name: "Setup CI Environment"
-description: "Shared setup for Rust, Solana and pnpm"
+description: "Shared setup for Rust, Solana, pnpm and just"
 
 inputs:
   install-rust:
@@ -34,6 +34,10 @@ inputs:
     description: "Solana CLI version to install (e.g., 'v4.3.0')"
     required: false
     default: "v4.3.0"
+  install-just:
+    description: "Install just"
+    required: false
+    default: "true"
   install-pnpm:
     description: "Install pnpm and Node.js"
     required: false
@@ -107,6 +111,12 @@ runs:
     - name: Add local bin to PATH
       shell: bash
       run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+    - name: Install just
+      if: inputs.install-just == 'true'
+      uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      with:
+        just-version: "1.50.0"
 
     - name: Install pnpm
       if: inputs.install-pnpm == 'true'

@@ -28,7 +28,7 @@ jobs:
           rust-cache-key: "rust-dev"
 
       - name: Run unit tests
-        run: make unit-test
+        run: just unit-test
 
   rust-integration-test:
     runs-on: ubuntu-latest
@@ -44,4 +44,4 @@ jobs:
           save-rust-cache: "true"
 
       - name: Run Rust integration tests
-        run: make integration-test
+        run: just integration-test

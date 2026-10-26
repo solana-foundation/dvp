@@ -25,4 +25,4 @@ jobs:
           rust-cache-key: "rust-dev"
 
       - name: Check generated files
-        run: make check-generated
+        run: just check-generated

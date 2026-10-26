@@ -27,4 +27,4 @@ jobs:
           rust-cache-key: "rust-dev"
 
       - name: Check formatting
-        run: make fmt-check
+        run: just fmt-check

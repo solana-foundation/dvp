@@ -26,4 +26,4 @@ jobs:
           rust-cache-key: "rust-dev"
 
       - name: Check linting
-        run: make lint-check
+        run: just lint-check
