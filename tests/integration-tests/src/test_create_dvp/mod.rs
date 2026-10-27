@@ -1,7 +1,9 @@
 use dvp_swap_program_client::{accounts::SwapDvp, instructions::CreateDvpBuilder};
 use litesvm::types::TransactionMetadata;
-use solana_sdk::signature::{Keypair, Signer};
-use spl_associated_token_account::instruction::create_associated_token_account;
+use solana_account::Account;
+use solana_keypair::Keypair;
+use solana_signer::Signer;
+use spl_associated_token_account_interface::instruction::create_associated_token_account;
 
 use crate::{
     state_utils::{
@@ -546,7 +548,13 @@ fn test_create_dvp_accepts_swap_dvp_preloaded_below_rent_reserve() {
 
     context
         .svm
-        .airdrop(&fixture.swap_dvp, 1)
+        .set_account(
+            fixture.swap_dvp,
+            Account {
+                lamports: 1,
+                ..Account::default()
+            },
+        )
         .expect("dust the future PDA");
 
     assert_create_dvp(&mut context, &fixture);
@@ -707,7 +715,7 @@ fn test_create_dvp_accepts_max_len_ref_string() {
 /// user_b, the settlement authority, and both mints are fresh.
 fn create_with_party_a(
     context: &mut TestContext,
-    party_a: solana_sdk::pubkey::Pubkey,
+    party_a: solana_pubkey::Pubkey,
 ) -> Result<TransactionMetadata, String> {
     let user_b = Keypair::new();
     let settlement_authority = Keypair::new();

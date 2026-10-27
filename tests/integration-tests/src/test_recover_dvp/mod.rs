@@ -1,13 +1,12 @@
 use dvp_swap_program_client::instructions::{
     CreateDvpBuilder, ReclaimDvpBuilder, RecoverDvpBuilder,
 };
-use solana_sdk::{
-    instruction::Instruction,
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-};
-use spl_associated_token_account::instruction::create_associated_token_account;
-use spl_token_2022::instruction::transfer_checked;
+use solana_instruction::Instruction;
+use solana_keypair::Keypair;
+use solana_pubkey::Pubkey;
+use solana_signer::Signer;
+use spl_associated_token_account_interface::instruction::create_associated_token_account;
+use spl_token_2022_interface::instruction::transfer_checked;
 
 use crate::{
     state_utils::{

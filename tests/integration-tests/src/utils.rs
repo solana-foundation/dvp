@@ -1,22 +1,21 @@
 use dvp_swap_program_client::{DvpSwapProgramError, DVP_SWAP_PROGRAM_ID};
 use litesvm::{types::TransactionMetadata, LiteSVM};
-use solana_program::{clock::Clock, pubkey};
+use solana_account::Account;
+use solana_clock::Clock;
+use solana_instruction::{AccountMeta, Instruction};
+use solana_keypair::Keypair;
+use solana_nullable::MaybeNull;
+use solana_program_option::COption;
 use solana_program_pack::Pack;
-use solana_sdk::{
-    account::Account,
-    instruction::{AccountMeta, Instruction},
-    program_option::COption,
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-    transaction::Transaction,
-};
-use spl_associated_token_account::{
-    get_associated_token_address_with_program_id,
+use solana_pubkey::pubkey;
+use solana_pubkey::Pubkey;
+use solana_signer::Signer;
+use solana_transaction::Transaction;
+use spl_associated_token_account_interface::{
+    address::get_associated_token_address_with_program_id,
     instruction::create_associated_token_account_idempotent,
 };
-use spl_pod::optional_keys::OptionalNonZeroPubkey;
-use spl_token::state::{Account as TokenAccount, Mint};
-use spl_token_2022::{
+use spl_token_2022_interface::{
     extension::{
         confidential_transfer::ConfidentialTransferMint,
         interest_bearing_mint::InterestBearingConfig,
@@ -31,9 +30,10 @@ use spl_token_2022::{
     pod::{PodAccount, PodMint},
     state::{Account as Token2022Account, AccountState, Mint as Token2022Mint},
 };
+use spl_token_interface::state::{Account as TokenAccount, Mint};
 
-pub use spl_token::ID as TOKEN_PROGRAM_ID;
-pub use spl_token_2022::ID as TOKEN_2022_PROGRAM_ID;
+pub use spl_token_2022_interface::ID as TOKEN_2022_PROGRAM_ID;
+pub use spl_token_interface::ID as TOKEN_PROGRAM_ID;
 
 pub const ATA_PROGRAM_ID: Pubkey = pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 pub const MEMO_PROGRAM_ID: Pubkey = pubkey!("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
@@ -185,7 +185,7 @@ impl Default for TestContext {
 
 /// The wrapped-SOL (native) mint, owned by legacy SPL Token. LiteSVM does
 /// not seed this account, so tests must write it with `set_native_mint`.
-pub const NATIVE_MINT: Pubkey = spl_token::native_mint::ID;
+pub const NATIVE_MINT: Pubkey = spl_token_interface::native_mint::ID;
 
 /// Write the wrapped-SOL mint (decimals 9, SPL Token) at its canonical
 /// address so WSOL legs can be exercised.
@@ -287,7 +287,7 @@ pub fn set_token_balance(
             owner: *owner,
             amount,
             delegate: COption::None,
-            state: spl_token::state::AccountState::Initialized,
+            state: spl_token_interface::state::AccountState::Initialized,
             is_native: COption::None,
             delegated_amount: 0,
             close_authority: COption::None,
@@ -307,7 +307,7 @@ pub fn set_token_balance(
             close_authority: COption::None,
         };
         let mut buf = vec![0u8; Token2022Account::LEN];
-        spl_token_2022::state::Account::pack(acct, &mut buf).unwrap();
+        spl_token_2022_interface::state::Account::pack(acct, &mut buf).unwrap();
         buf
     } else {
         panic!("unknown token program: {token_program}");
@@ -320,7 +320,7 @@ pub fn set_token_balance(
 /// it can authorize token operations but can never itself sign a
 /// transaction, so it is not a valid DvP party.
 pub fn set_token_multisig(context: &mut TestContext, address: &Pubkey, token_program: &Pubkey) {
-    use spl_token::state::Multisig;
+    use spl_token_interface::state::Multisig;
 
     let mut multisig = Multisig {
         m: 1,
@@ -556,7 +556,7 @@ pub fn set_mint_2022_with_permanent_delegate(
 ) {
     let data = build_mint_2022_with_extensions(&[ExtensionType::PermanentDelegate], |state| {
         let ext = state.init_extension::<PermanentDelegate>(true).unwrap();
-        ext.delegate = OptionalNonZeroPubkey::try_from(Some(*delegate)).unwrap();
+        ext.delegate = MaybeNull::from(*delegate);
     });
     write_account(context, mint, data, TOKEN_2022_PROGRAM_ID, 1_000_000_000);
 }
@@ -566,7 +566,7 @@ pub fn set_mint_2022_with_pausable(context: &mut TestContext, mint: &Pubkey, aut
         let ext = state.init_extension::<PausableConfig>(true).unwrap();
         *ext = PausableConfig {
             paused: false.into(),
-            authority: OptionalNonZeroPubkey::try_from(Some(*authority)).unwrap(),
+            authority: MaybeNull::from(*authority),
         };
     });
     write_account(context, mint, data, TOKEN_2022_PROGRAM_ID, 1_000_000_000);
@@ -581,8 +581,8 @@ pub fn set_mint_2022_with_transfer_hook(
     let data = build_mint_2022_with_extensions(&[ExtensionType::TransferHook], |state| {
         let ext = state.init_extension::<TransferHook>(true).unwrap();
         *ext = TransferHook {
-            authority: OptionalNonZeroPubkey::try_from(Some(*authority)).unwrap(),
-            program_id: OptionalNonZeroPubkey::try_from(Some(*hook_program_id)).unwrap(),
+            authority: MaybeNull::from(*authority),
+            program_id: MaybeNull::from(*hook_program_id),
         };
     });
     write_account(context, mint, data, TOKEN_2022_PROGRAM_ID, 1_000_000_000);
@@ -604,7 +604,7 @@ pub fn set_token_2022_with_hook_account(
     owner: &Pubkey,
     amount: u64,
 ) {
-    use spl_token_2022::pod::PodCOption;
+    use spl_token_2022_interface::pod::PodCOption;
 
     let space = ExtensionType::try_calculate_account_len::<Token2022Account>(&[
         ExtensionType::TransferHookAccount,
@@ -637,8 +637,8 @@ pub fn set_token_2022_with_memo_required(
     owner: &Pubkey,
     amount: u64,
 ) {
-    use spl_token_2022::extension::memo_transfer::MemoTransfer;
-    use spl_token_2022::pod::PodCOption;
+    use spl_token_2022_interface::extension::memo_transfer::MemoTransfer;
+    use spl_token_2022_interface::pod::PodCOption;
 
     let space = ExtensionType::try_calculate_account_len::<Token2022Account>(&[
         ExtensionType::MemoTransfer,
@@ -689,7 +689,7 @@ pub fn setup_hook_mint(context: &mut TestContext, mint: &Pubkey) {
     let validation_pda = get_extra_account_metas_address(mint, &HOOK_FIXTURE_PROGRAM_ID);
     let extras =
         vec![
-            ExtraAccountMeta::new_with_pubkey(&solana_program::system_program::ID, false, false)
+            ExtraAccountMeta::new_with_pubkey(&solana_sdk_ids::system_program::ID, false, false)
                 .unwrap(),
         ];
     let size = ExtraAccountMetaList::size_of(extras.len()).unwrap();
@@ -710,13 +710,13 @@ pub fn setup_hook_mint(context: &mut TestContext, mint: &Pubkey) {
 /// [`setup_hook_mint`]. Order matches `spl_transfer_hook_interface`'s
 /// offchain resolver: declared extras first, then the hook program ID,
 /// then the validation PDA.
-pub fn hook_extras_for_mint(mint: &Pubkey) -> Vec<solana_sdk::instruction::AccountMeta> {
-    use solana_sdk::instruction::AccountMeta;
+pub fn hook_extras_for_mint(mint: &Pubkey) -> Vec<solana_instruction::AccountMeta> {
+    use solana_instruction::AccountMeta;
     use spl_transfer_hook_interface::get_extra_account_metas_address;
 
     let validation_pda = get_extra_account_metas_address(mint, &HOOK_FIXTURE_PROGRAM_ID);
     vec![
-        AccountMeta::new_readonly(solana_program::system_program::ID, false),
+        AccountMeta::new_readonly(solana_sdk_ids::system_program::ID, false),
         AccountMeta::new_readonly(HOOK_FIXTURE_PROGRAM_ID, false),
         AccountMeta::new_readonly(validation_pda, false),
     ]
@@ -752,7 +752,7 @@ pub fn setup_malicious_hook_mint(
     let extras = vec![
         ExtraAccountMeta::new_with_pubkey(victim, true, true).unwrap(),
         ExtraAccountMeta::new_with_pubkey(attacker, false, true).unwrap(),
-        ExtraAccountMeta::new_with_pubkey(&solana_program::system_program::ID, false, false)
+        ExtraAccountMeta::new_with_pubkey(&solana_sdk_ids::system_program::ID, false, false)
             .unwrap(),
     ];
     let size = ExtraAccountMetaList::size_of(extras.len()).unwrap();
@@ -774,15 +774,15 @@ pub fn malicious_hook_extras(
     mint: &Pubkey,
     victim: &Pubkey,
     attacker: &Pubkey,
-) -> Vec<solana_sdk::instruction::AccountMeta> {
-    use solana_sdk::instruction::AccountMeta;
+) -> Vec<solana_instruction::AccountMeta> {
+    use solana_instruction::AccountMeta;
     use spl_transfer_hook_interface::get_extra_account_metas_address;
 
     let validation_pda = get_extra_account_metas_address(mint, &HOOK_FIXTURE_PROGRAM_ID);
     vec![
         AccountMeta::new(*victim, false),
         AccountMeta::new(*attacker, false),
-        AccountMeta::new_readonly(solana_program::system_program::ID, false),
+        AccountMeta::new_readonly(solana_sdk_ids::system_program::ID, false),
         AccountMeta::new_readonly(HOOK_FIXTURE_PROGRAM_ID, false),
         AccountMeta::new_readonly(validation_pda, false),
     ]
@@ -796,12 +796,12 @@ pub fn set_mint_2022_with_transfer_fee(
     basis_points: u16,
     maximum_fee: u64,
 ) {
-    use spl_token_2022::extension::transfer_fee::TransferFee;
-    use spl_token_2022::pod::PodCOption;
+    use spl_token_2022_interface::extension::transfer_fee::TransferFee;
+    use spl_token_2022_interface::pod::PodCOption;
 
     let data = build_mint_2022_with_extensions(&[ExtensionType::TransferFeeConfig], |state| {
         let ext = state.init_extension::<TransferFeeConfig>(true).unwrap();
-        let auth = OptionalNonZeroPubkey::try_from(Some(*authority)).unwrap();
+        let auth = MaybeNull::from(*authority);
         ext.transfer_fee_config_authority = auth;
         ext.withdraw_withheld_authority = auth;
         ext.withheld_amount = 0u64.into();
@@ -826,7 +826,7 @@ pub fn set_mint_2022_with_interest_bearing(
 ) {
     let data = build_mint_2022_with_extensions(&[ExtensionType::InterestBearingConfig], |state| {
         let ext = state.init_extension::<InterestBearingConfig>(true).unwrap();
-        ext.rate_authority = OptionalNonZeroPubkey::try_from(Some(*authority)).unwrap();
+        ext.rate_authority = MaybeNull::from(*authority);
         ext.initialization_timestamp = 0i64.into();
         ext.pre_update_average_rate = 0i16.into();
         ext.last_update_timestamp = 0i64.into();
@@ -843,7 +843,7 @@ pub fn set_mint_2022_with_scaled_ui_amount(
 ) {
     let data = build_mint_2022_with_extensions(&[ExtensionType::ScaledUiAmount], |state| {
         let ext = state.init_extension::<ScaledUiAmountConfig>(true).unwrap();
-        ext.authority = OptionalNonZeroPubkey::try_from(Some(*authority)).unwrap();
+        ext.authority = MaybeNull::from(*authority);
         ext.multiplier = 1.0f64.into();
         ext.new_multiplier_effective_timestamp = 0i64.into();
         ext.new_multiplier = 1.0f64.into();
@@ -871,7 +871,7 @@ pub fn set_mint_2022_with_confidential_transfer(
             let ext = state
                 .init_extension::<ConfidentialTransferMint>(true)
                 .unwrap();
-            ext.authority = OptionalNonZeroPubkey::try_from(Some(*authority)).unwrap();
+            ext.authority = MaybeNull::from(*authority);
             ext.auto_approve_new_accounts = false.into();
             ext.auditor_elgamal_pubkey = Default::default();
         });

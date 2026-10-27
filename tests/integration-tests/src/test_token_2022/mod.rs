@@ -21,7 +21,10 @@ use dvp_swap_program_client::instructions::{
     CancelDvpBuilder, CreateDvpBuilder, ReclaimDvpBuilder, RecoverDvpBuilder, RejectDvpBuilder,
     SettleDvpBuilder,
 };
-use solana_sdk::{account::Account, pubkey::Pubkey, signature::Keypair, signature::Signer};
+use solana_account::Account;
+use solana_keypair::Keypair;
+use solana_pubkey::Pubkey;
+use solana_signer::Signer;
 
 use crate::{
     state_utils::{
@@ -220,7 +223,7 @@ fn test_create_accepts_transfer_hook_on_mint_a() {
 fn build_create_dvp_ix(
     context: &TestContext,
     fixture: &crate::state_utils::DvpFixture,
-) -> solana_sdk::instruction::Instruction {
+) -> solana_instruction::Instruction {
     CreateDvpBuilder::new()
         .payer(context.payer.pubkey())
         .swap_dvp(fixture.swap_dvp)
@@ -791,7 +794,7 @@ fn setup_hook_on_mint_a(context: &mut TestContext, fixture: &crate::state_utils:
 /// path needs the same extras the swap program forwards on settle.
 fn fund_a_with_hook(context: &mut TestContext, fixture: &crate::state_utils::DvpFixture) {
     let extras = hook_extras_for_mint(&fixture.mint_a);
-    let mut ix = spl_token_2022::instruction::transfer_checked(
+    let mut ix = spl_token_2022_interface::instruction::transfer_checked(
         &TOKEN_2022_PROGRAM_ID,
         &fixture.user_a_ata_a,
         &fixture.mint_a,
@@ -1183,7 +1186,7 @@ fn test_reclaim_rejects_signer_bearing_hook_extra() {
 /// Recreate the escrow ATA for the (now closed) SwapDvp wallet so a late
 /// deposit can land in it, as the funding-race attack does.
 fn recreate_dead_escrow_a(context: &mut TestContext, fixture: &crate::state_utils::DvpFixture) {
-    let ix = spl_associated_token_account::instruction::create_associated_token_account(
+    let ix = spl_associated_token_account_interface::instruction::create_associated_token_account(
         &context.payer.pubkey(),
         &fixture.swap_dvp,
         &fixture.mint_a,
@@ -1293,7 +1296,7 @@ fn test_settle_with_hook_and_surplus_on_mint_a() {
     // Over-fund leg A by `surplus`; leg B funded exactly.
     let surplus = 1_234u64;
     let extras = hook_extras_for_mint(&fixture.mint_a);
-    let mut fund_ix = spl_token_2022::instruction::transfer_checked(
+    let mut fund_ix = spl_token_2022_interface::instruction::transfer_checked(
         &TOKEN_2022_PROGRAM_ID,
         &fixture.user_a_ata_a,
         &fixture.mint_a,
@@ -1388,7 +1391,7 @@ fn test_settle_with_hooks_on_both_legs() {
 
     // Fund B by raw transfer_checked + hook extras for mint_b.
     let extras_b = hook_extras_for_mint(&fixture.mint_b);
-    let mut fund_b_ix = spl_token_2022::instruction::transfer_checked(
+    let mut fund_b_ix = spl_token_2022_interface::instruction::transfer_checked(
         &TOKEN_2022_PROGRAM_ID,
         &fixture.user_b_ata_b,
         &fixture.mint_b,
@@ -1477,7 +1480,7 @@ fn test_settle_rejects_extras_count_overrun() {
 // other leg.
 
 /// Overwrite `mint` as an empty System-owned account (a closed mint).
-fn close_mint(context: &mut TestContext, mint: &solana_sdk::pubkey::Pubkey) {
+fn close_mint(context: &mut TestContext, mint: &solana_pubkey::Pubkey) {
     context
         .svm
         .set_account(
@@ -1485,7 +1488,7 @@ fn close_mint(context: &mut TestContext, mint: &solana_sdk::pubkey::Pubkey) {
             Account {
                 lamports: 1,
                 data: vec![],
-                owner: solana_sdk::system_program::ID,
+                owner: solana_sdk_ids::system_program::ID,
                 executable: false,
                 rent_epoch: 0,
             },

@@ -1,6 +1,7 @@
 use dvp_swap_program_client::instructions::ReclaimDvpBuilder;
-use solana_sdk::signature::{Keypair, Signer};
-use spl_associated_token_account::get_associated_token_address_with_program_id;
+use solana_keypair::Keypair;
+use solana_signer::Signer;
+use spl_associated_token_account_interface::address::get_associated_token_address_with_program_id;
 
 use crate::{
     state_utils::{

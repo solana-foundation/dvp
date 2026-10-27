@@ -2,9 +2,8 @@
 //! that serialized CPI remaining-account flags in the wrong order. The
 //! generated invoke helper must map tuple `.1` to is_writable and `.2` to
 //! is_signer, matching the `add_remaining_account(account, is_writable,
-//! is_signer)` builder. The fix is applied post-generation by
-//! scripts/lib/patch-rust-cpi-account-flags.ts; this test fails if that patch
-//! is dropped or stops matching.
+//! is_signer)` builder. Fixed upstream in v3.1.3; this test fails if a
+//! renderer change reintroduces the bug.
 
 const RECLAIM: &str = include_str!("generated/instructions/reclaim_dvp.rs");
 const SETTLE: &str = include_str!("generated/instructions/settle_dvp.rs");

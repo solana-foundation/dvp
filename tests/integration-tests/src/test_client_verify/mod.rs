@@ -8,11 +8,10 @@ use dvp_swap_program_client::accounts::SwapDvp;
 use dvp_swap_program_client::verify::{
     decode_swap_dvp_account, find_swap_dvp_address, find_swap_dvp_escrow_ata, SWAP_DVP_ACCOUNT_LEN,
 };
-use solana_sdk::{
-    account::Account,
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-};
+use solana_account::Account;
+use solana_keypair::Keypair;
+use solana_pubkey::Pubkey;
+use solana_signer::Signer;
 
 use crate::state_utils::{assert_create_dvp, setup_dvp, AMOUNT_A, AMOUNT_B};
 use crate::utils::{dvp_ata, swap_dvp_pda, TestContext};
@@ -32,8 +31,8 @@ fn forged_swap_dvp_data(attacker: &Pubkey) -> Vec<u8> {
         mint_a: Pubkey::new_unique().to_bytes().into(),
         mint_b: Pubkey::new_unique().to_bytes().into(),
         settlement_authority: attacker.to_bytes().into(),
-        token_program_a: spl_token::ID.to_bytes().into(),
-        token_program_b: spl_token::ID.to_bytes().into(),
+        token_program_a: spl_token_interface::ID.to_bytes().into(),
+        token_program_b: spl_token_interface::ID.to_bytes().into(),
         amount_a: 1,
         amount_b: 1_000_000_000,
         expiry_timestamp: i64::MAX / 2,
