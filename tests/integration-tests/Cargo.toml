@@ -4,7 +4,7 @@ version = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
-litesvm = "=0.7.0"
+litesvm = "=0.7.1"
 borsh = { workspace = true }
 dvp-swap-program-client = { workspace = true, features = ["fetch"] }
 solana-sdk = "2.3.1"
