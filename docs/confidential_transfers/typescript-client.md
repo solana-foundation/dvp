@@ -295,8 +295,8 @@ under `clients/typescript/src/__tests__/`. Helpers such as `utils.ts` and
 `context.ts` are not collected as tests. Test files run sequentially to limit
 concurrent proof generation.
 
-After `make build` and `make fetch-test-fixtures`, run `pnpm test` or
-`make typescript-test`. `make integration-test-no-build`, `make all-test` and CI
+After `just build` and `just fetch-test-fixtures`, run `pnpm test` or
+`just typescript-test`. `just integration-test-no-build`, `just all-test` and CI
 include the same complete suite.
 
 `pnpm test:unit` runs only the files that need no program build: the top-level

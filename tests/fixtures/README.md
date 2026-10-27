@@ -14,9 +14,9 @@ verified build).
 From the repository root:
 
 ```sh
-make fetch-test-fixtures
-make check-test-fixtures
-make all-test
+just fetch-test-fixtures
+just check-test-fixtures
+just all-test
 ```
 
 The download script also accepts an RPC URL:
@@ -30,10 +30,10 @@ new binary fails the hash check and preserves existing local fixtures. Use an
 archived copy matching `SHA256SUMS`, or review the new binary and regression
 results before deliberately updating the hashes. Never accept new hashes just
 to make setup pass. A supplied archive can be verified with
-`make check-test-fixtures` without RPC access.
+`just check-test-fixtures` without RPC access.
 
 The DvP program and its transfer-hook and smart-wallet fixtures are built from
-this checkout by `make build`. The ZK ElGamal proof program is the LiteSVM 0.16
+this checkout by `just build`. The ZK ElGamal proof program is the LiteSVM 0.16
 builtin. The Record fixture is retained for later CT tests. Existing tests
 enforce the legacy transaction wire-size limit explicitly, since LiteSVM
 execution alone does not enforce that limit.

@@ -252,10 +252,10 @@ Build without test helpers:
 Client integration tests live in `clients/rust/tests` and reuse the framework's
 LiteSVM setup and pinned program fixtures. `tests/main.rs` is the explicit
 `integration` target (`autotests = false`); shared `tests/utils.rs` is not a
-separate test binary. After `make build` and
-`make fetch-test-fixtures`, run them with
+separate test binary. After `just build` and
+`just fetch-test-fixtures`, run them with
 `cargo test -p dvp-swap-program-client --all-features --test integration`.
-`make integration-test-no-build`, `make all-test` and the CI workspace test run
+`just integration-test-no-build`, `just all-test` and the CI workspace test run
 include them. Client unit tests can run separately with
 `cargo test -p dvp-swap-program-client --all-features --lib`.
 

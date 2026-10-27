@@ -190,14 +190,14 @@ Confidential mode adds the following codes; codes 0-23 retain their numbering.
 ## Build & test
 
 ```sh
-make build              # generate clients + cargo-build-sbf
-make unit-test          # program and Rust client unit tests
-make integration-test   # build + Rust integration and all TypeScript client tests
-make fmt                # cargo fmt + clippy + pnpm format
-make verify-program-id  # pre-deploy: deploy keypair matches the declared program ID
+just build              # generate clients + cargo-build-sbf
+just unit-test          # program, Rust client and TypeScript unit tests
+just integration-test   # build + Rust integration and all TypeScript client tests
+just fmt                # cargo fmt + clippy + pnpm format
+just verify-program-id  # pre-deploy: deploy keypair matches the declared program ID
 ```
 
-Run `make fetch-test-fixtures` once before integration tests. External Token-2022
+Run `just fetch-test-fixtures` once before integration tests. External Token-2022
 and SPL Record binaries are pinned by SHA-256; see [test fixtures](tests/fixtures/README.md).
 Host tests use Rust 1.93.1 and LiteSVM 0.16 (Agave 4.2).
 
