@@ -6,10 +6,10 @@ pin the exact bytes, including program-dump padding. Token-2022 is the
 mainnet deployment of solana-program/token-2022 at `8867f751` (OtterSec
 verified build).
 
-| File | Mainnet program |
-| --- | --- |
+| File                | Mainnet program                               |
+| ------------------- | --------------------------------------------- |
 | `spl_token_2022.so` | `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb` |
-| `spl_record.so` | `recr1L3PCGKLbckBqMNcJhuuyU1zgo8nBhfLVsJNwr5` |
+| `spl_record.so`     | `recr1L3PCGKLbckBqMNcJhuuyU1zgo8nBhfLVsJNwr5` |
 
 From the repository root:
 

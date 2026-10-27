@@ -78,11 +78,11 @@ most 64 unique addresses, including base and extra accounts. V1 ignores lookup
 tables; v0 uses `SessionConfig::lookup_tables`. Settle checks capacity for two
 incoming credits when payment and surplus use the same destination account.
 
-| Builder | Inputs and result |
-| --- | --- |
-| `create_session` | Generated Create accounts/terms, keys and agreed amount; inserts ciphertexts, decryptable zero and the inline pubkey proof. |
-| `apply_session` | Generated Apply accounts/seed terms and `TransferSource`; computes the actual pending counter and correct new AE balance. |
-| `settle_session` | Checked confidential swap, agreed amount, escrow and both recipient snapshots; prepares payment, amount-binding, optional surplus and zero proofs. |
+| Builder          | Inputs and result                                                                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create_session` | Generated Create accounts/terms, keys and agreed amount; inserts ciphertexts, decryptable zero and the inline pubkey proof.                                            |
+| `apply_session`  | Generated Apply accounts/seed terms and `TransferSource`; computes the actual pending counter and correct new AE balance.                                              |
+| `settle_session` | Checked confidential swap, agreed amount, escrow and both recipient snapshots; prepares payment, amount-binding, optional surplus and zero proofs.                     |
 | `refund_session` | `RefundInstruction` wrapping generated Reclaim/Cancel/Reject/Recover accounts and optional `RefundRequest`; prepares `Partial`/`Full` proofs or `None` without proofs. |
 
 Funding is an ordinary SPL Token-2022 wallet transfer to the verified escrow.
