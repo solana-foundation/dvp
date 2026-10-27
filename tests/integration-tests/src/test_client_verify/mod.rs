@@ -9,8 +9,8 @@ use dvp_swap_program_client::verify::{
     decode_swap_dvp_account, find_swap_dvp_address, find_swap_dvp_escrow_ata, SWAP_DVP_ACCOUNT_LEN,
 };
 use solana_account::Account;
+use solana_address::Address;
 use solana_keypair::Keypair;
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 
 use crate::state_utils::{assert_create_dvp, setup_dvp, AMOUNT_A, AMOUNT_B};
@@ -18,18 +18,18 @@ use crate::utils::{dvp_ata, swap_dvp_pda, TestContext};
 
 /// The System Program ID is the all-zero pubkey. An account it owns is a
 /// plain (non-program-owned) account, exactly the exploit setup.
-const SYSTEM_PROGRAM_ID: Pubkey = Pubkey::new_from_array([0u8; 32]);
+const SYSTEM_PROGRAM_ID: Address = Address::new_from_array([0u8; 32]);
 
 /// Attacker-chosen SwapDvp-looking terms, Borsh-serialized. With
 /// `earliest_settlement_timestamp = None` this is the 450-byte layout, 8
 /// bytes shorter than `SwapDvp::LEN` because Borsh drops the None payload.
-fn forged_swap_dvp_data(attacker: &Pubkey) -> Vec<u8> {
+fn forged_swap_dvp_data(attacker: &Address) -> Vec<u8> {
     let forged = SwapDvp {
         bump: 255,
-        user_a: Pubkey::new_unique().to_bytes().into(),
-        user_b: Pubkey::new_unique().to_bytes().into(),
-        mint_a: Pubkey::new_unique().to_bytes().into(),
-        mint_b: Pubkey::new_unique().to_bytes().into(),
+        user_a: Address::new_unique().to_bytes().into(),
+        user_b: Address::new_unique().to_bytes().into(),
+        mint_a: Address::new_unique().to_bytes().into(),
+        mint_b: Address::new_unique().to_bytes().into(),
         settlement_authority: attacker.to_bytes().into(),
         token_program_a: spl_token_interface::ID.to_bytes().into(),
         token_program_b: spl_token_interface::ID.to_bytes().into(),
@@ -40,8 +40,8 @@ fn forged_swap_dvp_data(attacker: &Pubkey) -> Vec<u8> {
         ref_string: [0u8; 64],
         user_a_settlement_destination: attacker.to_bytes().into(),
         user_b_settlement_destination: attacker.to_bytes().into(),
-        mint_a_authority: Pubkey::new_unique().to_bytes().into(),
-        mint_b_authority: Pubkey::new_unique().to_bytes().into(),
+        mint_a_authority: Address::new_unique().to_bytes().into(),
+        mint_b_authority: Address::new_unique().to_bytes().into(),
         earliest_settlement_timestamp: None,
     };
     let mut data = Vec::new();
@@ -92,7 +92,7 @@ fn checked_decode_rejects_system_owned_forgery() {
 /// bytes.
 #[test]
 fn strict_try_from_bytes_rejects_short_layout() {
-    let attacker = Pubkey::new_unique();
+    let attacker = Address::new_unique();
     let data = forged_swap_dvp_data(&attacker);
     assert!(SwapDvp::try_from_bytes(&data).is_err());
 
@@ -148,7 +148,7 @@ fn checked_decode_accepts_real_dvp_and_derivations_match() {
     assert_eq!(dvp.amount_b, AMOUNT_B);
     assert_eq!(dvp.bump, bump);
     assert_eq!(
-        Pubkey::new_from_array(dvp.settlement_authority.to_bytes()),
+        Address::new_from_array(dvp.settlement_authority.to_bytes()),
         fixture.settlement_authority.pubkey()
     );
 }
@@ -162,7 +162,7 @@ fn checked_decode_rejects_account_at_wrong_address() {
     assert_create_dvp(&mut context, &fixture);
 
     let real = context.get_account(&fixture.swap_dvp).unwrap();
-    let elsewhere = Pubkey::new_unique();
+    let elsewhere = Address::new_unique();
     let err = decode_swap_dvp_account(&elsewhere, &real)
         .expect_err("account at non-canonical address must be rejected");
     assert!(

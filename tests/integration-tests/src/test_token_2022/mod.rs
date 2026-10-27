@@ -22,8 +22,8 @@ use dvp_swap_program_client::instructions::{
     SettleDvpBuilder,
 };
 use solana_account::Account;
+use solana_address::Address;
 use solana_keypair::Keypair;
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 
 use crate::{
@@ -543,7 +543,7 @@ fn test_settle_rejects_mint_authority_gained_after_create() {
     assert_create_dvp(&mut context, &fixture);
     assert_fund_b(&mut context, &fixture);
 
-    let attacker = Pubkey::new_unique();
+    let attacker = Address::new_unique();
     set_mint_with_authority(
         &mut context,
         &fixture.mint_a,
@@ -593,7 +593,7 @@ fn test_settle_rejects_mint_authority_swapped_after_create() {
         TOKEN_2022_PROGRAM_ID,
     );
 
-    let original = Pubkey::new_unique();
+    let original = Address::new_unique();
     set_mint_with_authority(
         &mut context,
         &fixture.mint_a,
@@ -605,7 +605,7 @@ fn test_settle_rejects_mint_authority_swapped_after_create() {
     assert_fund_a(&mut context, &fixture);
     assert_fund_b(&mut context, &fixture);
 
-    let attacker = Pubkey::new_unique();
+    let attacker = Address::new_unique();
     set_mint_with_authority(
         &mut context,
         &fixture.mint_a,
@@ -646,7 +646,7 @@ fn test_settle_succeeds_when_mint_authority_unchanged() {
         TOKEN_2022_PROGRAM_ID,
     );
 
-    let live_authority = Pubkey::new_unique();
+    let live_authority = Address::new_unique();
     set_mint_with_authority(
         &mut context,
         &fixture.mint_a,
@@ -678,7 +678,7 @@ fn test_settle_rejects_mint_b_authority_gained_after_create() {
     assert_create_dvp(&mut context, &fixture);
     assert_fund_a(&mut context, &fixture);
 
-    let attacker = Pubkey::new_unique();
+    let attacker = Address::new_unique();
     set_mint_with_authority(
         &mut context,
         &fixture.mint_b,
@@ -1480,7 +1480,7 @@ fn test_settle_rejects_extras_count_overrun() {
 // other leg.
 
 /// Overwrite `mint` as an empty System-owned account (a closed mint).
-fn close_mint(context: &mut TestContext, mint: &solana_pubkey::Pubkey) {
+fn close_mint(context: &mut TestContext, mint: &solana_address::Address) {
     context
         .svm
         .set_account(

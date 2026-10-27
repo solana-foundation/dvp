@@ -715,7 +715,7 @@ fn test_create_dvp_accepts_max_len_ref_string() {
 /// user_b, the settlement authority, and both mints are fresh.
 fn create_with_party_a(
     context: &mut TestContext,
-    party_a: solana_pubkey::Pubkey,
+    party_a: solana_address::Address,
 ) -> Result<TransactionMetadata, String> {
     let user_b = Keypair::new();
     let settlement_authority = Keypair::new();
