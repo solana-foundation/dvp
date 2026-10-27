@@ -8,10 +8,9 @@
 use dvp_swap_program_client::instructions::{
     CreateDvpBuilder, ReclaimDvpBuilder, RecoverDvpBuilder, RejectDvpBuilder,
 };
-use solana_sdk::{
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-};
+use solana_address::Address;
+use solana_keypair::Keypair;
+use solana_signer::Signer;
 
 use crate::{
     state_utils::{AMOUNT_A, AMOUNT_B, REF_STRING},
@@ -25,18 +24,18 @@ use crate::{
 /// A DvP whose `user_a` is a smart-wallet vault PDA and `user_b` a plain
 /// keypair. Both mints are bare legacy SPL Token.
 struct VaultDvp {
-    vault: Pubkey,
+    vault: Address,
     vault_index: u8,
     user_b: Keypair,
     settlement_authority: Keypair,
-    mint_a: Pubkey,
-    mint_b: Pubkey,
-    swap_dvp: Pubkey,
-    nonce_tombstone: Pubkey,
-    vault_ata_a: Pubkey,
-    user_b_ata_b: Pubkey,
-    dvp_ata_a: Pubkey,
-    dvp_ata_b: Pubkey,
+    mint_a: Address,
+    mint_b: Address,
+    swap_dvp: Address,
+    nonce_tombstone: Address,
+    vault_ata_a: Address,
+    user_b_ata_b: Address,
+    dvp_ata_a: Address,
+    dvp_ata_b: Address,
     nonce: u64,
 }
 
@@ -118,8 +117,8 @@ fn setup_vault_dvp(context: &mut TestContext, vault_index: u8) -> VaultDvp {
 fn fund_escrow(
     context: &mut TestContext,
     dvp: &VaultDvp,
-    escrow: &Pubkey,
-    mint: &Pubkey,
+    escrow: &Address,
+    mint: &Address,
     amount: u64,
 ) {
     set_token_balance(

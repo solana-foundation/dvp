@@ -2,11 +2,10 @@ use dvp_swap_program_client::instructions::{
     CancelDvpBuilder, CreateDvpBuilder, ReclaimDvpBuilder, RejectDvpBuilder, SettleDvpBuilder,
 };
 use litesvm::types::TransactionMetadata;
-use solana_sdk::{
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-};
-use spl_token_2022::instruction::transfer_checked;
+use solana_address::Address;
+use solana_keypair::Keypair;
+use solana_signer::Signer;
+use spl_token_2022_interface::instruction::transfer_checked;
 
 use crate::utils::{
     create_ata, dvp_ata, fund_wallet_ata, nonce_tombstone_pda, set_mint, swap_dvp_pda, TestContext,
@@ -29,18 +28,18 @@ pub struct DvpFixture {
     pub user_a: Keypair,
     pub user_b: Keypair,
     pub settlement_authority: Keypair,
-    pub mint_a: Pubkey,
-    pub mint_b: Pubkey,
-    pub token_program_a: Pubkey,
-    pub token_program_b: Pubkey,
-    pub swap_dvp: Pubkey,
-    pub nonce_tombstone: Pubkey,
-    pub user_a_ata_a: Pubkey,
-    pub user_a_ata_b: Pubkey,
-    pub user_b_ata_a: Pubkey,
-    pub user_b_ata_b: Pubkey,
-    pub dvp_ata_a: Pubkey,
-    pub dvp_ata_b: Pubkey,
+    pub mint_a: Address,
+    pub mint_b: Address,
+    pub token_program_a: Address,
+    pub token_program_b: Address,
+    pub swap_dvp: Address,
+    pub nonce_tombstone: Address,
+    pub user_a_ata_a: Address,
+    pub user_a_ata_b: Address,
+    pub user_b_ata_a: Address,
+    pub user_b_ata_b: Address,
+    pub dvp_ata_a: Address,
+    pub dvp_ata_b: Address,
     pub expiry: i64,
     pub nonce: u64,
 }
@@ -57,8 +56,8 @@ pub struct DvpFixture {
 pub fn setup_dvp_with_programs(
     context: &mut TestContext,
     nonce: u64,
-    token_program_a: Pubkey,
-    token_program_b: Pubkey,
+    token_program_a: Address,
+    token_program_b: Address,
 ) -> DvpFixture {
     let user_a = Keypair::new();
     let user_b = Keypair::new();
@@ -142,10 +141,10 @@ pub fn assert_create_dvp(context: &mut TestContext, fixture: &DvpFixture) -> Tra
 fn fund_leg(
     context: &mut TestContext,
     user: &Keypair,
-    source_ata: &Pubkey,
-    dest_ata: &Pubkey,
-    mint: &Pubkey,
-    token_program: &Pubkey,
+    source_ata: &Address,
+    dest_ata: &Address,
+    mint: &Address,
+    token_program: &Address,
     amount: u64,
 ) -> TransactionMetadata {
     let ix = transfer_checked(

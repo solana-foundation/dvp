@@ -1,13 +1,12 @@
 use dvp_swap_program_client::instructions::{
     CreateDvpBuilder, ReclaimDvpBuilder, RecoverDvpBuilder,
 };
-use solana_sdk::{
-    instruction::Instruction,
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-};
-use spl_associated_token_account::instruction::create_associated_token_account;
-use spl_token_2022::instruction::transfer_checked;
+use solana_address::Address;
+use solana_instruction::Instruction;
+use solana_keypair::Keypair;
+use solana_signer::Signer;
+use spl_associated_token_account_interface::instruction::create_associated_token_account;
+use spl_token_2022_interface::instruction::transfer_checked;
 
 use crate::{
     state_utils::{
@@ -25,7 +24,7 @@ use crate::{
 
 /// The fixture leg's token program for `mint`. Falls back to leg A's
 /// program for a mint that is on neither leg.
-fn leg_token_program(fixture: &DvpFixture, mint: &Pubkey) -> Pubkey {
+fn leg_token_program(fixture: &DvpFixture, mint: &Address) -> Address {
     if *mint == fixture.mint_b {
         fixture.token_program_b
     } else {
@@ -37,10 +36,10 @@ fn leg_token_program(fixture: &DvpFixture, mint: &Pubkey) -> Pubkey {
 /// `escrow`, and `dest` must match it.
 fn recover_ix(
     fixture: &DvpFixture,
-    signer: &Pubkey,
-    mint: &Pubkey,
-    escrow: &Pubkey,
-    dest: &Pubkey,
+    signer: &Address,
+    mint: &Address,
+    escrow: &Address,
+    dest: &Address,
 ) -> Instruction {
     RecoverDvpBuilder::new()
         .signer(*signer)
@@ -67,7 +66,7 @@ fn recreate_escrow(
     context: &mut TestContext,
     payer: &Keypair,
     fixture: &DvpFixture,
-    mint: &Pubkey,
+    mint: &Address,
 ) {
     context.airdrop_if_required(&payer.pubkey(), 1_000_000_000);
     let ix = create_associated_token_account(

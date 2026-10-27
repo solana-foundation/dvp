@@ -89,11 +89,12 @@ check-generated: generate-idl
         exit 1
     fi
 
-# Unit tests: program crate's #[cfg(test)] modules + JS client tests.
+# Unit tests: program and Rust client #[cfg(test)] modules + JS client tests.
 unit-test: generate-clients
     @echo "Running unit tests for swap program..."
     pnpm test:unit
     @cd program && cargo test
+    cargo test -p dvp-swap-program-client
 
 # Integration tests (litesvm-based).
 integration-test-no-build:
