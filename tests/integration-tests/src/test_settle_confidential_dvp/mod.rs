@@ -17,9 +17,9 @@ use dvp_swap_program_client::{
     types::CtTransferData,
     DvpSwapProgramError as Error, DVP_SWAP_PROGRAM_ID,
 };
+use solana_address::Address;
 use solana_instruction::{error::InstructionError, AccountMeta, Instruction};
 use solana_keypair::Keypair;
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 use solana_zk_elgamal_proof_interface::{instruction::ProofInstruction, proof_data::ZkProofData};
 use solana_zk_sdk::{
@@ -189,12 +189,12 @@ fn setup_fixture(
         token_program_b: TOKEN,
         memo_program: MEMO_PROGRAM_ID,
         zk_elgamal_proof_program: ZK,
-        payment_equality_context: Pubkey::default(),
-        payment_validity_context: Pubkey::default(),
-        payment_range_context: Pubkey::default(),
-        eq_lo_context: Pubkey::default(),
-        eq_hi_context: Pubkey::default(),
-        zero_context: Pubkey::default(),
+        payment_equality_context: Address::default(),
+        payment_validity_context: Address::default(),
+        payment_range_context: Address::default(),
+        eq_lo_context: Address::default(),
+        eq_hi_context: Address::default(),
+        zero_context: Address::default(),
         surplus_equality_context: None,
         surplus_validity_context: None,
         surplus_range_context: None,
@@ -204,7 +204,7 @@ fn setup_fixture(
 
 struct PreparedTransfer {
     data: CtTransferData,
-    contexts: [Pubkey; 3],
+    contexts: [Address; 3],
     remaining: ElGamalCiphertext,
     limbs: [ElGamalCiphertext; 2],
 }
@@ -583,7 +583,7 @@ fn validates_every_context_and_its_writability_before_cpi() {
             true,
         );
         let mut wrong_authority = original.clone();
-        wrong_authority.data[..core::mem::size_of::<Pubkey>()]
+        wrong_authority.data[..core::mem::size_of::<Address>()]
             .copy_from_slice(f.user_b.pubkey().as_ref());
         context.svm.set_account(address, wrong_authority).unwrap();
         assert_failure(
@@ -911,8 +911,8 @@ fn checks_public_settlement_guards_and_optional_account_layout() {
     context.svm.set_account(accounts.swap_dvp, swap).unwrap();
     for (address, owner, balance) in [
         (accounts.dvp_ata_a, accounts.swap_dvp, AMOUNT_A - 1),
-        (accounts.user_b_destination_ata_a, Pubkey::new_unique(), 0),
-        (accounts.user_a_ata_a, Pubkey::new_unique(), 0),
+        (accounts.user_b_destination_ata_a, Address::new_unique(), 0),
+        (accounts.user_a_ata_a, Address::new_unique(), 0),
     ] {
         let original = context.get_account(&address).unwrap();
         crate::utils::set_token_balance(
@@ -979,7 +979,7 @@ fn revalidates_both_mints_before_any_transfer() {
             &mut changed_authority.data,
         )
         .unwrap();
-        mint.base.mint_authority = solana_program_option::COption::Some(Pubkey::new_unique());
+        mint.base.mint_authority = solana_program_option::COption::Some(Address::new_unique());
         mint.pack_base();
         context.svm.set_account(address, changed_authority).unwrap();
         assert_failure(

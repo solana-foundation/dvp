@@ -73,11 +73,11 @@ const INSTRUCTION_DATA_LEN: usize = 32 * 5 + 8;
 ///
 /// # Instruction Data
 /// The original DvP seed inputs, in PDA-seed order:
-/// * `settlement_authority` (Pubkey)
-/// * `user_a` (Pubkey)
-/// * `user_b` (Pubkey)
-/// * `mint_a` (Pubkey)
-/// * `mint_b` (Pubkey)
+/// * `settlement_authority` (Address)
+/// * `user_a` (Address)
+/// * `user_b` (Address)
+/// * `mint_a` (Address)
+/// * `mint_b` (Address)
 /// * `nonce` (u64)
 pub fn process_recover_dvp(
     program_id: &Address,

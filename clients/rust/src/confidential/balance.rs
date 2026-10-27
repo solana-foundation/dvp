@@ -1,7 +1,7 @@
 use super::{ConfidentialError, EscrowKeys, AMOUNT_LO_BITS};
 use crate::verify::{find_swap_dvp_escrow_ata, ConfidentialSwapDvp};
 use curve25519_dalek::scalar::Scalar;
-use solana_pubkey::Pubkey;
+use solana_address::Address;
 use solana_zk_sdk::encryption::{elgamal::ElGamalCiphertext, pedersen::G};
 use spl_token_2022_interface::{
     extension::{
@@ -22,11 +22,11 @@ pub struct EscrowBalance {
 }
 
 pub fn read_escrow_account(
-    address: &Pubkey,
-    owner: &Pubkey,
+    address: &Address,
+    owner: &Address,
     data: &[u8],
-    swap: &Pubkey,
-    mint: &Pubkey,
+    swap: &Address,
+    mint: &Address,
 ) -> Result<(ConfidentialTransferAccount, u64), ConfidentialError> {
     let token = spl_token_2022_interface::ID;
     if *owner != token || *address != find_swap_dvp_escrow_ata(swap, mint, &token) {

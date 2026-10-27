@@ -5,7 +5,7 @@ use dvp_swap_program_client::{confidential::*, verify::verify_confidential_fundi
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use solana_account::Account;
-use solana_pubkey::Pubkey;
+use solana_address::Address;
 use solana_signer::Signer;
 
 /// Rust-created swap and escrow B, verified before funding by both clients.
@@ -26,7 +26,7 @@ fn unhex(text: &str) -> Vec<u8> {
         .collect()
 }
 
-fn funding_keys(master: &[u8], swap: &Pubkey) -> EscrowKeys {
+fn funding_keys(master: &[u8], swap: &Address) -> EscrowKeys {
     let seed = derive_shared_seed(swap, |message| -> Result<[u8; 32], ()> {
         let mut mac = Hmac::<Sha256>::new_from_slice(master).unwrap();
         mac.update(message);
@@ -36,7 +36,7 @@ fn funding_keys(master: &[u8], swap: &Pubkey) -> EscrowKeys {
     EscrowKeys::from_seed(&seed).unwrap()
 }
 
-fn account_json(address: &Pubkey, account: &Account) -> serde_json::Value {
+fn account_json(address: &Address, account: &Account) -> serde_json::Value {
     serde_json::json!({
         "address": address.to_string(),
         "owner": account.owner.to_string(),
@@ -45,7 +45,7 @@ fn account_json(address: &Pubkey, account: &Account) -> serde_json::Value {
     })
 }
 
-fn account_from_json(value: &serde_json::Value) -> (Pubkey, Account) {
+fn account_from_json(value: &serde_json::Value) -> (Address, Account) {
     let address = value["address"].as_str().unwrap().parse().unwrap();
     let account = Account {
         lamports: value["lamports"].as_str().unwrap().parse().unwrap(),

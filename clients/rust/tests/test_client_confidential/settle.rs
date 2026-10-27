@@ -139,8 +139,8 @@ fn verify_confidential_terms_compares_every_public_term() {
     assert_eq!(checked.escrow_a, f.dvp.accounts.dvp_ata_a);
     assert_eq!(checked.escrow_b, f.dvp.accounts.dvp_ata_b);
 
-    let other = solana_pubkey::Pubkey::new_unique();
-    type Change = fn(&mut ExpectedConfidentialTerms, solana_pubkey::Pubkey);
+    let other = solana_address::Address::new_unique();
+    type Change = fn(&mut ExpectedConfidentialTerms, solana_address::Address);
     let changed: [(Change, &str); 6] = [
         (|t, k| t.token_program_a = k, "token program A"),
         (|t, _| t.amount_a += 1, "amount A"),
@@ -191,8 +191,8 @@ fn settle_checks_the_account_set_against_the_swap() {
     let recipient = context.get_account(&f.recipient).unwrap();
     let refund = context.get_account(&f.refund).unwrap();
     let mint_b = context.get_account(&f.dvp.accounts.mint_b).unwrap();
-    let other = solana_pubkey::Pubkey::new_unique();
-    type Change = fn(&mut SettleConfidentialDvp, solana_pubkey::Pubkey);
+    let other = solana_address::Address::new_unique();
+    type Change = fn(&mut SettleConfidentialDvp, solana_address::Address);
     let changed: [(Change, &str); 12] = [
         (|a, k| a.settlement_authority = k, "settlement authority"),
         (|a, k| a.swap_dvp = k, "swap"),

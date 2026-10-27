@@ -63,9 +63,9 @@ pub(super) const MAX_DVP_DURATION_SECS: i64 = 365 * 24 * 60 * 60;
 /// * `nonce` (u64) - Disambiguates DvPs sharing all other seeds
 /// * `ref_string` (Option<String>) - Opaque client reference, at most
 ///   `MAX_REF_STRING_LEN` bytes; stored zero-padded (None = all zeros)
-/// * `user_a_settlement_destination` (Option<Pubkey>) - Wallet receiving the
+/// * `user_a_settlement_destination` (Option<Address>) - Wallet receiving the
 ///   cash leg at Settle; defaults to `user_a`
-/// * `user_b_settlement_destination` (Option<Pubkey>) - Wallet receiving the
+/// * `user_b_settlement_destination` (Option<Address>) - Wallet receiving the
 ///   asset leg at Settle; defaults to `user_b`
 /// * `earliest_settlement_timestamp` (Option<i64>) - If set, settlement
 ///   is also rejected before this timestamp

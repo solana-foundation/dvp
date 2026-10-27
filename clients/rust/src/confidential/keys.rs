@@ -2,7 +2,7 @@ use super::{AmountCiphertexts, ConfidentialError, AMOUNT_LO_BITS, MAX_TRANSFER_A
 use curve25519_dalek::scalar::Scalar;
 use hkdf::Hkdf;
 use sha2::Sha512;
-use solana_pubkey::Pubkey;
+use solana_address::Address;
 use solana_zk_sdk::encryption::{
     auth_encryption::AeKey, derivation::derive_confidential_keys_from_ikm, elgamal::ElGamalKeypair,
     pedersen::PedersenOpening,
@@ -15,7 +15,7 @@ const AMOUNT_OPENINGS_SALT: &[u8] = b"dvp/confidential-amount-b/v1";
 /// The callback computes HMAC-SHA256 with a dedicated master key of at least
 /// 32 bytes. The master key stays in the caller's KMS/HSM.
 pub fn derive_shared_seed<E>(
-    swap: &Pubkey,
+    swap: &Address,
     mac: impl FnOnce(&[u8]) -> Result<[u8; 32], E>,
 ) -> Result<[u8; 32], E> {
     let mut message = SHARED_SEED_DOMAIN.to_vec();

@@ -10,8 +10,8 @@ use crate::{
     },
 };
 use dvp_swap_program_client::DvpSwapProgramError as Error;
+use solana_address::Address;
 use solana_instruction::{error::InstructionError, AccountMeta};
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 
 const AMOUNT_B: u64 = (3 << LO_BITS) + 42;
@@ -244,7 +244,7 @@ fn validates_reclaim_party_leg_mode_and_contexts() {
         (7, InstructionError::IncorrectProgramId),
     ] {
         let mut bad = ix.clone();
-        bad.accounts[position].pubkey = Pubkey::new_unique();
+        bad.accounts[position].pubkey = Address::new_unique();
         assert_failure(&mut context, bad, &f.user_b, expected, true);
     }
     let mut bad = ix.clone();

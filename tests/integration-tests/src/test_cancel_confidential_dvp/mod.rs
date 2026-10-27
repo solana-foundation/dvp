@@ -10,8 +10,8 @@ use crate::{
     },
 };
 use dvp_swap_program_client::{DvpSwapProgramError as Error, DVP_SWAP_PROGRAM_ID};
+use solana_address::Address;
 use solana_instruction::{error::InstructionError, AccountMeta};
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 use solana_zk_elgamal_proof_interface::instruction::ProofInstruction;
 use solana_zk_sdk::zk_elgamal_proof_program::build_zero_ciphertext_proof_data;
@@ -158,7 +158,7 @@ fn rejects_invalid_contexts_and_recipient_before_refunding_leg_a() {
             if expected == Error::InvalidProofContext {
                 bad.owner = DVP_SWAP_PROGRAM_ID;
             } else {
-                bad.data[..32].copy_from_slice(Pubkey::new_unique().as_ref());
+                bad.data[..32].copy_from_slice(Address::new_unique().as_ref());
             }
             context.svm.set_account(key, bad).unwrap();
             assert_failure(
@@ -269,7 +269,7 @@ fn authorization_account_binding_and_hook_limits_match_terminal_contract() {
         (11, InstructionError::IncorrectProgramId),
     ] {
         let mut bad = ix.clone();
-        bad.accounts[position].pubkey = Pubkey::new_unique();
+        bad.accounts[position].pubkey = Address::new_unique();
         assert_failure(&mut context, bad, signer, expected, true);
     }
     let mut bad = ix.clone();

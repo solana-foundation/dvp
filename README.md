@@ -34,18 +34,18 @@ is not the agreed payment. Use the checked client readers to distinguish modes.
 ```rust
 SwapDvp {
     bump: u8,
-    user_a: Pubkey,                              // seller
-    user_b: Pubkey,                              // buyer
-    mint_a: Pubkey,                              // asset
-    mint_b: Pubkey,                              // cash
-    settlement_authority: Pubkey,
+    user_a: Address,                              // seller
+    user_b: Address,                              // buyer
+    mint_a: Address,                              // asset
+    mint_b: Address,                              // cash
+    settlement_authority: Address,
     amount_a: u64,
     amount_b: u64,
     expiry_timestamp: i64,                       // settlement rejected after this
     nonce: u64,                                  // disambiguates DvPs sharing other seeds
     ref_string: [u8; 64],                        // opaque client reference, UTF-8 zero-padded
-    user_a_settlement_destination: Pubkey,       // receives the cash leg at Settle (defaults to user_a)
-    user_b_settlement_destination: Pubkey,       // receives the asset leg at Settle (defaults to user_b)
+    user_a_settlement_destination: Address,       // receives the cash leg at Settle (defaults to user_a)
+    user_b_settlement_destination: Address,       // receives the asset leg at Settle (defaults to user_b)
     earliest_settlement_timestamp: Option<i64>,  // optional lower bound on settlement
 }
 ```

@@ -3,7 +3,7 @@ extern crate alloc;
 use crate::error::DvpSwapProgramError;
 use alloc::vec::Vec;
 use codama::CodamaAccount;
-use pinocchio::{cpi::Seed, error::ProgramError, Address as Pubkey};
+use pinocchio::{cpi::Seed, error::ProgramError, Address};
 
 pub const SWAP_DVP_SEED: &[u8] = b"dvp";
 
@@ -31,15 +31,15 @@ pub const MAX_REF_STRING_LEN: usize = 64;
 #[repr(C)]
 pub struct SwapDvp {
     pub bump: u8,
-    pub user_a: Pubkey,
-    pub user_b: Pubkey,
-    pub mint_a: Pubkey,
-    pub mint_b: Pubkey,
-    pub settlement_authority: Pubkey,
+    pub user_a: Address,
+    pub user_b: Address,
+    pub mint_a: Address,
+    pub mint_b: Address,
+    pub settlement_authority: Address,
     /// Owner of `mint_a`, captured at Create.
-    pub token_program_a: Pubkey,
+    pub token_program_a: Address,
     /// Owner of `mint_b`, captured at Create.
-    pub token_program_b: Pubkey,
+    pub token_program_b: Address,
     pub amount_a: u64,
     pub amount_b: u64,
     /// Cluster time (`Clock::unix_timestamp`), not wall-clock. See README.
@@ -55,16 +55,16 @@ pub struct SwapDvp {
     /// optional instruction arg defaults to `user_a`, so Settle never
     /// branches. Only Settle reads this; refunds (Reclaim/Cancel/
     /// Reject and Settle surplus) always go to the depositor.
-    pub user_a_settlement_destination: Pubkey,
+    pub user_a_settlement_destination: Address,
     /// Wallet receiving user_b's settlement proceeds — the asset leg
     /// (`mint_a`). Defaults to `user_b`; same rules as above.
-    pub user_b_settlement_destination: Pubkey,
+    pub user_b_settlement_destination: Address,
     /// `mint_a`'s mint authority captured at Create, or the default (all
     /// zero) pubkey when the mint has none. Settle rejects if it no longer
     /// matches, so a leg can't gain a fresh authority post-consent.
-    pub mint_a_authority: Pubkey,
+    pub mint_a_authority: Address,
     /// `mint_b`'s mint authority captured at Create. Same rule as above.
-    pub mint_b_authority: Pubkey,
+    pub mint_b_authority: Address,
     /// `None` = settlement allowed any time before `expiry_timestamp`.
     /// `Some(t)` = additionally requires `now >= t`. Kept last: it is the
     /// only variable-width Borsh option, so its fixed on-chain sentinel is
@@ -155,49 +155,49 @@ impl SwapDvp {
         let bump = data[offset];
         offset += 1;
 
-        let user_a = Pubkey::new_from_array(
+        let user_a = Address::new_from_array(
             data[offset..offset + 32]
                 .try_into()
                 .map_err(|_| ProgramError::InvalidAccountData)?,
         );
         offset += 32;
 
-        let user_b = Pubkey::new_from_array(
+        let user_b = Address::new_from_array(
             data[offset..offset + 32]
                 .try_into()
                 .map_err(|_| ProgramError::InvalidAccountData)?,
         );
         offset += 32;
 
-        let mint_a = Pubkey::new_from_array(
+        let mint_a = Address::new_from_array(
             data[offset..offset + 32]
                 .try_into()
                 .map_err(|_| ProgramError::InvalidAccountData)?,
         );
         offset += 32;
 
-        let mint_b = Pubkey::new_from_array(
+        let mint_b = Address::new_from_array(
             data[offset..offset + 32]
                 .try_into()
                 .map_err(|_| ProgramError::InvalidAccountData)?,
         );
         offset += 32;
 
-        let settlement_authority = Pubkey::new_from_array(
+        let settlement_authority = Address::new_from_array(
             data[offset..offset + 32]
                 .try_into()
                 .map_err(|_| ProgramError::InvalidAccountData)?,
         );
         offset += 32;
 
-        let token_program_a = Pubkey::new_from_array(
+        let token_program_a = Address::new_from_array(
             data[offset..offset + 32]
                 .try_into()
                 .map_err(|_| ProgramError::InvalidAccountData)?,
         );
         offset += 32;
 
-        let token_program_b = Pubkey::new_from_array(
+        let token_program_b = Address::new_from_array(
             data[offset..offset + 32]
                 .try_into()
                 .map_err(|_| ProgramError::InvalidAccountData)?,
@@ -237,28 +237,28 @@ impl SwapDvp {
             .map_err(|_| ProgramError::InvalidAccountData)?;
         offset += MAX_REF_STRING_LEN;
 
-        let user_a_settlement_destination = Pubkey::new_from_array(
+        let user_a_settlement_destination = Address::new_from_array(
             data[offset..offset + 32]
                 .try_into()
                 .map_err(|_| ProgramError::InvalidAccountData)?,
         );
         offset += 32;
 
-        let user_b_settlement_destination = Pubkey::new_from_array(
+        let user_b_settlement_destination = Address::new_from_array(
             data[offset..offset + 32]
                 .try_into()
                 .map_err(|_| ProgramError::InvalidAccountData)?,
         );
         offset += 32;
 
-        let mint_a_authority = Pubkey::new_from_array(
+        let mint_a_authority = Address::new_from_array(
             data[offset..offset + 32]
                 .try_into()
                 .map_err(|_| ProgramError::InvalidAccountData)?,
         );
         offset += 32;
 
-        let mint_b_authority = Pubkey::new_from_array(
+        let mint_b_authority = Address::new_from_array(
             data[offset..offset + 32]
                 .try_into()
                 .map_err(|_| ProgramError::InvalidAccountData)?,
@@ -348,22 +348,22 @@ mod tests {
     fn test_swap_dvp() -> SwapDvp {
         SwapDvp {
             bump: 254,
-            user_a: Pubkey::new_from_array([1u8; 32]),
-            user_b: Pubkey::new_from_array([2u8; 32]),
-            mint_a: Pubkey::new_from_array([3u8; 32]),
-            mint_b: Pubkey::new_from_array([4u8; 32]),
-            settlement_authority: Pubkey::new_from_array([5u8; 32]),
-            token_program_a: Pubkey::new_from_array([6u8; 32]),
-            token_program_b: Pubkey::new_from_array([7u8; 32]),
+            user_a: Address::new_from_array([1u8; 32]),
+            user_b: Address::new_from_array([2u8; 32]),
+            mint_a: Address::new_from_array([3u8; 32]),
+            mint_b: Address::new_from_array([4u8; 32]),
+            settlement_authority: Address::new_from_array([5u8; 32]),
+            token_program_a: Address::new_from_array([6u8; 32]),
+            token_program_b: Address::new_from_array([7u8; 32]),
             amount_a: 1_000,
             amount_b: 2_500,
             expiry_timestamp: 1_780_000_000,
             nonce: 42,
             ref_string: [8u8; 64],
-            user_a_settlement_destination: Pubkey::new_from_array([9u8; 32]),
-            user_b_settlement_destination: Pubkey::new_from_array([10u8; 32]),
-            mint_a_authority: Pubkey::new_from_array([11u8; 32]),
-            mint_b_authority: Pubkey::new_from_array([12u8; 32]),
+            user_a_settlement_destination: Address::new_from_array([9u8; 32]),
+            user_b_settlement_destination: Address::new_from_array([10u8; 32]),
+            mint_a_authority: Address::new_from_array([11u8; 32]),
+            mint_b_authority: Address::new_from_array([12u8; 32]),
             earliest_settlement_timestamp: None,
         }
     }
@@ -500,8 +500,8 @@ mod tests {
     fn test_to_bytes_load_roundtrip() {
         let base = test_swap_dvp();
 
-        let key = Pubkey::new_from_array([11u8; 32]);
-        let default = Pubkey::default();
+        let key = Address::new_from_array([11u8; 32]);
+        let default = Address::default();
         let cases = [
             (None, default, default),
             (Some(1_780_000_000), key, default),

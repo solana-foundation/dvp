@@ -475,11 +475,11 @@ Discriminator 11. After close, `user_b` drains an escrow B that stayed open: a c
 
 Data:
 
-| Field                                                          | Type          | Notes                               |
-| -------------------------------------------------------------- | ------------- | ----------------------------------- |
-| `settlement_authority`, `user_a`, `user_b`, `mint_a`, `mint_b` | `Pubkey` each | seed inputs, re-derive the swap PDA |
-| `nonce`                                                        | `u64`         | seed input                          |
-| `leg_b_refund`                                                 | `LegBRefund`  | `None`, `Full` or `Partial` (7.2)   |
+| Field                                                          | Type           | Notes                               |
+| -------------------------------------------------------------- | -------------- | ----------------------------------- |
+| `settlement_authority`, `user_a`, `user_b`, `mint_a`, `mint_b` | `Address` each | seed inputs, re-derive the swap PDA |
+| `nonce`                                                        | `u64`          | seed input                          |
+| `leg_b_refund`                                                 | `LegBRefund`   | `None`, `Full` or `Partial` (7.2)   |
 
 Accounts:
 
@@ -507,12 +507,12 @@ Discriminator 12. Moves escrow B's pending balance into available, while the swa
 
 Data:
 
-| Field                                                          | Type          | Notes                                   |
-| -------------------------------------------------------------- | ------------- | --------------------------------------- |
-| `expected_pending_balance_credit_counter`                      | `u64`         | as Token-2022 `ApplyPendingBalance`     |
-| `new_decryptable_available_balance`                            | `[u8; 36]`    | new available balance under `escrow_ae` |
-| `settlement_authority`, `user_a`, `user_b`, `mint_a`, `mint_b` | `Pubkey` each | seed inputs, re-derive the swap PDA     |
-| `nonce`                                                        | `u64`         | seed input                              |
+| Field                                                          | Type           | Notes                                   |
+| -------------------------------------------------------------- | -------------- | --------------------------------------- |
+| `expected_pending_balance_credit_counter`                      | `u64`          | as Token-2022 `ApplyPendingBalance`     |
+| `new_decryptable_available_balance`                            | `[u8; 36]`     | new available balance under `escrow_ae` |
+| `settlement_authority`, `user_a`, `user_b`, `mint_a`, `mint_b` | `Address` each | seed inputs, re-derive the swap PDA     |
+| `nonce`                                                        | `u64`          | seed input                              |
 
 Accounts:
 

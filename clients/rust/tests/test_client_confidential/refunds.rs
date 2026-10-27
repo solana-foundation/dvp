@@ -10,7 +10,7 @@ use dvp_swap_program_client::confidential::test_utils::{
     checked_available_balance, ciphertext_matches, AMOUNT_LO_BITS,
 };
 use dvp_swap_program_client::{confidential::*, instructions::*};
-use solana_pubkey::Pubkey;
+use solana_address::Address;
 use solana_signer::Signer;
 use spl_token_2022_interface::extension::confidential_transfer::ConfidentialTransferAccount;
 
@@ -437,7 +437,7 @@ fn refund_binds_the_recipient_snapshot() {
     };
     let recipient_keys = EscrowKeys::from_seed(&[22; 32]).unwrap();
     let other = EscrowKeys::from_seed(&[23; 32]).unwrap();
-    let (mint, destination) = (Pubkey::new_unique(), Pubkey::new_unique());
+    let (mint, destination) = (Address::new_unique(), Address::new_unique());
     let ct = ConfidentialTransferAccount {
         elgamal_pubkey: (*recipient_keys.elgamal.pubkey()).into(),
         approved: true.into(),
@@ -448,10 +448,10 @@ fn refund_binds_the_recipient_snapshot() {
     let account = crate::utils::ct_token_account(mint, ct);
     let mint_account = crate::utils::ct_mint_account();
     let mut system_owned = account.clone();
-    system_owned.owner = Pubkey::default();
-    let other_mint = crate::utils::ct_token_account(Pubkey::new_unique(), ct);
+    system_owned.owner = Address::default();
+    let other_mint = crate::utils::ct_token_account(Address::new_unique(), ct);
     let config = SessionConfig::new(
-        Pubkey::new_unique(),
+        Address::new_unique(),
         TransactionFormat::V1,
         Default::default(),
     );
@@ -460,9 +460,9 @@ fn refund_binds_the_recipient_snapshot() {
             &config,
             RefundInstruction::Reclaim(ReclaimConfidentialDvp {
                 signer: config.payer,
-                swap_dvp: Pubkey::new_unique(),
+                swap_dvp: Address::new_unique(),
                 mint,
-                dvp_source_ata: Pubkey::new_unique(),
+                dvp_source_ata: Address::new_unique(),
                 signer_dest_ata: destination,
                 token_program: TOKEN,
                 memo_program: MEMO_PROGRAM_ID,
@@ -494,7 +494,7 @@ fn refund_binds_the_recipient_snapshot() {
     assert!(refund(bound, Some(recipient_keys.elgamal.pubkey())).is_ok());
     for (recipient, expected, error) in [
         (
-            crate::utils::recipient_account(Pubkey::new_unique(), &account),
+            crate::utils::recipient_account(Address::new_unique(), &account),
             None,
             "recipient address or owner",
         ),
@@ -568,7 +568,7 @@ fn refund_from_state(
 ) -> Result<TransactionSession, ConfidentialError> {
     let keys = refund_keys();
     let config = SessionConfig::new(
-        Pubkey::new_unique(),
+        Address::new_unique(),
         TransactionFormat::V1,
         Default::default(),
     );
@@ -579,14 +579,14 @@ fn refund_from_state(
         maximum_pending_balance_credit_counter: 1.into(),
         ..Default::default()
     };
-    let (mint, destination) = (Pubkey::new_unique(), Pubkey::new_unique());
+    let (mint, destination) = (Address::new_unique(), Address::new_unique());
     let recipient = crate::utils::ct_token_account(mint, recipient);
     let mint_account = crate::utils::ct_mint_account();
     let accounts = ReclaimConfidentialDvp {
         signer: config.payer,
-        swap_dvp: Pubkey::new_unique(),
+        swap_dvp: Address::new_unique(),
         mint,
-        dvp_source_ata: Pubkey::new_unique(),
+        dvp_source_ata: Address::new_unique(),
         signer_dest_ata: destination,
         token_program: TOKEN,
         memo_program: MEMO_PROGRAM_ID,

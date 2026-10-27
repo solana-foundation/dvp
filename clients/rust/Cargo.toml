@@ -11,7 +11,6 @@ repository = "https://github.com/solana-foundation/dvp"
 borsh = { workspace = true, features = ["derive"] }
 solana-account-info = "3.1.1"
 # PDA derivation and generated Borsh readers; Solana uses PDA syscalls on SBF.
-solana-pubkey = { version = "4.2.1", features = ["curve25519", "borsh"] }
 solana-address = { version = "2.2", features = ["curve25519", "borsh"] }
 solana-instruction = "3.4.1"
 solana-cpi = "3.1"

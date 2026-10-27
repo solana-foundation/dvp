@@ -16,11 +16,11 @@ use dvp_swap_program_client::{
 };
 use litesvm::types::TransactionMetadata;
 use solana_account::Account;
+use solana_address::Address;
 use solana_address_lookup_table_interface::state::{AddressLookupTable, LookupTableMeta};
 use solana_instruction::{AccountMeta, Instruction};
 use solana_keypair::Keypair;
 use solana_message::{AddressLookupTableAccount, VersionedMessage};
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 use spl_token_2022_interface::extension::confidential_transfer::ConfidentialTransferAccount;
 
@@ -38,10 +38,10 @@ pub struct ClientFixture {
     pub keys: EscrowKeys,
     pub buyer_keys: Keys,
     pub recipient_keys: Keys,
-    pub recipient: Pubkey,
-    pub refund: Pubkey,
-    pub asset_recipient: Pubkey,
-    pub asset_refund: Pubkey,
+    pub recipient: Address,
+    pub refund: Address,
+    pub asset_recipient: Address,
+    pub asset_refund: Address,
     pub config: SessionConfig,
 }
 
@@ -200,7 +200,7 @@ impl ClientFixture {
             _ => panic!("expected confidential swap"),
         }
     }
-    pub fn apply_accounts(&self, signer: Pubkey) -> ApplyConfidentialDvp {
+    pub fn apply_accounts(&self, signer: Address) -> ApplyConfidentialDvp {
         ApplyConfidentialDvp {
             signer,
             swap_dvp: self.dvp.accounts.swap_dvp,
@@ -246,7 +246,7 @@ impl ClientFixture {
     }
 
     pub fn settle_accounts(&self) -> SettleConfidentialDvp {
-        let placeholder = Pubkey::default();
+        let placeholder = Address::default();
         SettleConfidentialDvp {
             settlement_authority: self.dvp.authority.pubkey(),
             swap_dvp: self.dvp.accounts.swap_dvp,
@@ -275,8 +275,8 @@ impl ClientFixture {
     }
 }
 
-pub fn install_lut(context: &mut TestContext, config: &mut SessionConfig, addresses: Vec<Pubkey>) {
-    let key = Pubkey::new_unique();
+pub fn install_lut(context: &mut TestContext, config: &mut SessionConfig, addresses: Vec<Address>) {
+    let key = Address::new_unique();
     let data = AddressLookupTable {
         meta: LookupTableMeta::default(),
         addresses: Cow::Borrowed(&addresses),
@@ -422,10 +422,10 @@ pub fn trace(
 fn wallet_with_capacity(
     context: &mut TestContext,
     wallet: &Keypair,
-    mint: &Pubkey,
+    mint: &Address,
     keys: &Keys,
     maximum: u64,
-) -> Pubkey {
+) -> Address {
     use solana_zk_sdk::zk_elgamal_proof_program::build_pubkey_validity_proof_data;
     use spl_token_2022_interface::{
         extension::{confidential_transfer::instruction as ct, ExtensionType},
@@ -534,7 +534,7 @@ pub fn cleanup(
 }
 
 /// A fetched token account as a session recipient bound to `address`.
-pub fn recipient_account(address: Pubkey, account: &Account) -> RecipientAccount<'_> {
+pub fn recipient_account(address: Address, account: &Account) -> RecipientAccount<'_> {
     RecipientAccount {
         address,
         owner: account.owner,
@@ -544,7 +544,7 @@ pub fn recipient_account(address: Pubkey, account: &Account) -> RecipientAccount
 
 /// A Token-2022 account for `mint` holding only the given CT extension, for
 /// session tests that need a recipient snapshot without ledger setup.
-pub fn ct_token_account(mint: Pubkey, ct: ConfidentialTransferAccount) -> Account {
+pub fn ct_token_account(mint: Address, ct: ConfidentialTransferAccount) -> Account {
     use spl_token_2022_interface::{
         extension::{BaseStateWithExtensionsMut, ExtensionType, StateWithExtensionsMut},
         state::{Account as TokenAccount, AccountState},
@@ -558,7 +558,7 @@ pub fn ct_token_account(mint: Pubkey, ct: ConfidentialTransferAccount) -> Accoun
         StateWithExtensionsMut::<TokenAccount>::unpack_uninitialized(&mut data).unwrap();
     state.base = TokenAccount {
         mint,
-        owner: Pubkey::new_unique(),
+        owner: Address::new_unique(),
         state: AccountState::Initialized,
         ..Default::default()
     };
@@ -577,7 +577,7 @@ pub fn ct_token_account(mint: Pubkey, ct: ConfidentialTransferAccount) -> Accoun
 }
 
 /// A fetched mint account as a session mint snapshot bound to `address`.
-pub fn mint_account(address: Pubkey, account: &Account) -> MintAccount<'_> {
+pub fn mint_account(address: Address, account: &Account) -> MintAccount<'_> {
     MintAccount {
         address,
         owner: account.owner,

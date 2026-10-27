@@ -7,9 +7,9 @@ use dvp_swap_program_client::confidential::test_utils::{
     RECORD_PROGRAM_ID,
 };
 use dvp_swap_program_client::{confidential::*, DvpSwapProgramError};
+use solana_address::Address;
 use solana_instruction::error::InstructionError;
 use solana_keypair::Keypair;
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 use solana_transaction::TransactionError;
 use solana_zk_elgamal_proof_interface::instruction::ProofInstruction;
@@ -385,9 +385,9 @@ fn prepared_cleanup_session(
         &config,
         TransferAccounts {
             authority: authority.pubkey(),
-            source: Pubkey::new_unique(),
-            mint: Pubkey::new_unique(),
-            destination: Pubkey::new_unique(),
+            source: Address::new_unique(),
+            mint: Address::new_unique(),
+            destination: Address::new_unique(),
         },
         TransferRequest {
             source: TransferSource {

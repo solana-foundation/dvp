@@ -2,11 +2,11 @@ use dvp_swap_program_client::instructions::{
     CancelDvpBuilder, ReclaimDvpBuilder, RecoverDvpBuilder, RejectDvpBuilder, SettleDvpBuilder,
 };
 use solana_account::Account;
+use solana_address::Address;
 use solana_clock::Clock;
 use solana_instruction::Instruction;
 use solana_keypair::Keypair;
 use solana_program_pack::Pack;
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 use solana_transaction::Transaction;
 use spl_token_2022_interface::state::Account as TokenAccount;
@@ -43,8 +43,8 @@ fn setup(context: &mut TestContext, rates: [Option<u16>; 2]) -> DvpFixture {
     for wallet in [&user_a, &user_b, &settlement_authority] {
         context.airdrop_if_required(&wallet.pubkey(), 1_000_000_000);
     }
-    let mint_a = Pubkey::new_unique();
-    let mint_b = Pubkey::new_unique();
+    let mint_a = Address::new_unique();
+    let mint_b = Address::new_unique();
     let programs = rates.map(|rate| {
         if rate.is_some() {
             TOKEN_2022_PROGRAM_ID
@@ -142,7 +142,7 @@ fn set_epoch(context: &mut TestContext, epoch: u64) {
 fn schedule_fee(
     context: &mut TestContext,
     fixture: &DvpFixture,
-    mint: Pubkey,
+    mint: Address,
     rate: u16,
     cap: u64,
 ) {
@@ -158,7 +158,7 @@ fn schedule_fee(
     context.send(ix, &[&fixture.settlement_authority]).unwrap();
 }
 
-fn fee_config(context: &TestContext, mint: Pubkey) -> TransferFeeConfig {
+fn fee_config(context: &TestContext, mint: Address) -> TransferFeeConfig {
     let account = context.get_account(&mint).unwrap();
     *StateWithExtensions::<Mint>::unpack(&account.data)
         .unwrap()
@@ -166,7 +166,7 @@ fn fee_config(context: &TestContext, mint: Pubkey) -> TransferFeeConfig {
         .unwrap()
 }
 
-fn withheld(context: &TestContext, ata: Pubkey) -> u64 {
+fn withheld(context: &TestContext, ata: Address) -> u64 {
     let account = context.get_account(&ata).unwrap();
     let state = StateWithExtensions::<TokenAccount>::unpack(&account.data).unwrap();
     state

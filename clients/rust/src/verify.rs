@@ -12,7 +12,7 @@
 
 use crate::accounts::SwapDvp;
 use crate::generated::programs::DVP_SWAP_PROGRAM_ID;
-use solana_pubkey::{pubkey, Pubkey};
+use solana_address::{address, Address};
 
 /// Fixed on-chain size of a `SwapDvp` account (`SwapDvp::LEN`). The final
 /// `earliest_settlement_timestamp` is always 1 tag byte + 8 payload bytes,
@@ -66,18 +66,18 @@ impl SwapDvpAccount {
 pub const SWAP_DVP_SEED: &[u8] = b"dvp";
 
 /// Canonical SPL Associated Token Account program.
-pub const ASSOCIATED_TOKEN_PROGRAM_ID: Pubkey =
-    pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+pub const ASSOCIATED_TOKEN_PROGRAM_ID: Address =
+    address!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 
 /// Token programs the DvP program accepts for either leg.
-const SPL_TOKEN_PROGRAM_ID: Pubkey = pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-const TOKEN_2022_PROGRAM_ID: Pubkey = pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+const SPL_TOKEN_PROGRAM_ID: Address = address!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+const TOKEN_2022_PROGRAM_ID: Address = address!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
 /// Why a fetched account was rejected as a canonical `SwapDvp`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SwapDvpVerifyError {
     /// Account is not owned by the DvP program.
-    WrongOwner { expected: Pubkey, actual: Pubkey },
+    WrongOwner { expected: Address, actual: Address },
     /// Account data is not exactly [`SWAP_DVP_ACCOUNT_LEN`] bytes.
     WrongSize { expected: usize, actual: usize },
     /// Neither supported layout length matched.
@@ -86,7 +86,7 @@ pub enum SwapDvpVerifyError {
     Malformed(String),
     /// Account is program-owned but not at its canonical PDA for the
     /// decoded terms.
-    WrongAddress { expected: Pubkey, actual: Pubkey },
+    WrongAddress { expected: Address, actual: Address },
 }
 
 impl core::fmt::Display for SwapDvpVerifyError {
@@ -141,15 +141,15 @@ impl SwapDvp {
 /// `[b"dvp", settlement_authority, user_a, user_b, mint_a, mint_b, nonce_le]`).
 /// Compare this against any address a counterparty supplies.
 pub fn find_swap_dvp_address(
-    settlement_authority: &Pubkey,
-    user_a: &Pubkey,
-    user_b: &Pubkey,
-    mint_a: &Pubkey,
-    mint_b: &Pubkey,
+    settlement_authority: &Address,
+    user_a: &Address,
+    user_b: &Address,
+    mint_a: &Address,
+    mint_b: &Address,
     nonce: u64,
-) -> (Pubkey, u8) {
+) -> (Address, u8) {
     let nonce_bytes = nonce.to_le_bytes();
-    Pubkey::find_program_address(
+    Address::find_program_address(
         &[
             SWAP_DVP_SEED,
             settlement_authority.as_ref(),
@@ -167,11 +167,11 @@ pub fn find_swap_dvp_address(
 /// program). Funders send raw transfers here, so derive it from a verified
 /// `swap_dvp` PDA, not from an unverified supplied address.
 pub fn find_swap_dvp_escrow_ata(
-    swap_dvp: &Pubkey,
-    mint: &Pubkey,
-    token_program: &Pubkey,
-) -> Pubkey {
-    Pubkey::find_program_address(
+    swap_dvp: &Address,
+    mint: &Address,
+    token_program: &Address,
+) -> Address {
+    Address::find_program_address(
         &[swap_dvp.as_ref(), token_program.as_ref(), mint.as_ref()],
         &ASSOCIATED_TOKEN_PROGRAM_ID,
     )
@@ -186,8 +186,8 @@ pub fn find_swap_dvp_escrow_ata(
 /// RPC `data_slice`: a 458-byte prefix of a confidential account decodes as
 /// public.
 pub fn verify_swap_dvp_bytes(
-    expected_address: &Pubkey,
-    owner: &Pubkey,
+    expected_address: &Address,
+    owner: &Address,
     data: &[u8],
 ) -> Result<SwapDvpAccount, SwapDvpVerifyError> {
     if *owner != DVP_SWAP_PROGRAM_ID {
@@ -250,7 +250,7 @@ pub fn verify_swap_dvp_bytes(
 /// generated `SwapDvp::from_bytes` before acting on terms.
 #[cfg(feature = "fetch")]
 pub fn decode_swap_dvp_account(
-    expected_address: &Pubkey,
+    expected_address: &Address,
     account: &solana_account::Account,
 ) -> Result<SwapDvpAccount, SwapDvpVerifyError> {
     verify_swap_dvp_bytes(expected_address, &account.owner, &account.data)
@@ -261,9 +261,9 @@ pub fn decode_swap_dvp_account(
 /// before SPL wallet funding.
 #[cfg(all(feature = "fetch", feature = "confidential"))]
 pub fn verify_confidential_funding(
-    swap_address: &Pubkey,
+    swap_address: &Address,
     swap_account: &solana_account::Account,
-    escrow_address: &Pubkey,
+    escrow_address: &Address,
     escrow_account: &solana_account::Account,
     keys: &crate::confidential::EscrowKeys,
     expected_amount_b: u64,
@@ -294,19 +294,19 @@ pub fn verify_confidential_funding(
 /// Create stores a user's own address when no destination is given.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExpectedConfidentialTerms {
-    pub settlement_authority: Pubkey,
-    pub user_a: Pubkey,
-    pub user_b: Pubkey,
-    pub mint_a: Pubkey,
-    pub mint_b: Pubkey,
-    pub token_program_a: Pubkey,
+    pub settlement_authority: Address,
+    pub user_a: Address,
+    pub user_b: Address,
+    pub mint_a: Address,
+    pub mint_b: Address,
+    pub token_program_a: Address,
     pub amount_a: u64,
     pub amount_b: u64,
     pub nonce: u64,
     pub expiry_timestamp: i64,
     pub earliest_settlement_timestamp: Option<i64>,
-    pub user_a_settlement_destination: Pubkey,
-    pub user_b_settlement_destination: Pubkey,
+    pub user_a_settlement_destination: Address,
+    pub user_b_settlement_destination: Address,
 }
 
 /// Swap and escrow B checked against [`ExpectedConfidentialTerms`], with both
@@ -314,10 +314,10 @@ pub struct ExpectedConfidentialTerms {
 #[cfg(all(feature = "fetch", feature = "confidential"))]
 #[derive(Clone, Debug)]
 pub struct VerifiedConfidentialTerms {
-    pub swap_address: Pubkey,
+    pub swap_address: Address,
     pub swap: ConfidentialSwapDvp,
-    pub escrow_a: Pubkey,
-    pub escrow_b: Pubkey,
+    pub escrow_a: Address,
+    pub escrow_b: Address,
     pub state:
         spl_token_2022_interface::extension::confidential_transfer::ConfidentialTransferAccount,
 }
@@ -392,7 +392,7 @@ pub fn verify_confidential_terms(
 #[cfg(feature = "fetch")]
 pub fn fetch_swap_dvp_accounts(
     rpc: &solana_client::rpc_client::RpcClient,
-) -> Result<Vec<(Pubkey, SwapDvpAccount)>, Box<dyn std::error::Error>> {
+) -> Result<Vec<(Address, SwapDvpAccount)>, Box<dyn std::error::Error>> {
     use solana_client::{rpc_config::RpcProgramAccountsConfig, rpc_filter::RpcFilterType};
     let mut result = Vec::new();
     for size in [SWAP_DVP_ACCOUNT_LEN, CONFIDENTIAL_SWAP_DVP_ACCOUNT_LEN] {
@@ -427,11 +427,11 @@ mod tests {
     fn sample() -> SwapDvp {
         SwapDvp {
             bump: 254,
-            user_a: Pubkey::new_from_array([1u8; 32]),
-            user_b: Pubkey::new_from_array([2u8; 32]),
-            mint_a: Pubkey::new_from_array([3u8; 32]),
-            mint_b: Pubkey::new_from_array([4u8; 32]),
-            settlement_authority: Pubkey::new_from_array([5u8; 32]),
+            user_a: Address::new_from_array([1u8; 32]),
+            user_b: Address::new_from_array([2u8; 32]),
+            mint_a: Address::new_from_array([3u8; 32]),
+            mint_b: Address::new_from_array([4u8; 32]),
+            settlement_authority: Address::new_from_array([5u8; 32]),
             token_program_a: SPL_TOKEN_PROGRAM_ID,
             token_program_b: TOKEN_2022_PROGRAM_ID,
             amount_a: 1_000,
@@ -439,10 +439,10 @@ mod tests {
             expiry_timestamp: 1_780_000_000,
             nonce: 42,
             ref_string: [8u8; 64],
-            user_a_settlement_destination: Pubkey::new_from_array([9u8; 32]),
-            user_b_settlement_destination: Pubkey::new_from_array([10u8; 32]),
-            mint_a_authority: Pubkey::new_from_array([11u8; 32]),
-            mint_b_authority: Pubkey::new_from_array([12u8; 32]),
+            user_a_settlement_destination: Address::new_from_array([9u8; 32]),
+            user_b_settlement_destination: Address::new_from_array([10u8; 32]),
+            mint_a_authority: Address::new_from_array([11u8; 32]),
+            mint_b_authority: Address::new_from_array([12u8; 32]),
             earliest_settlement_timestamp: None,
         }
     }
@@ -564,7 +564,7 @@ mod tests {
             &dvp.mint_b,
             dvp.nonce,
         );
-        let not_program = Pubkey::new_from_array([99u8; 32]);
+        let not_program = Address::new_from_array([99u8; 32]);
         let err = verify_swap_dvp_bytes(&addr, &not_program, &on_chain_bytes(&dvp)).unwrap_err();
         assert!(matches!(err, SwapDvpVerifyError::WrongOwner { .. }));
     }
@@ -572,7 +572,7 @@ mod tests {
     #[test]
     fn verify_rejects_wrong_address() {
         let dvp = sample();
-        let wrong = Pubkey::new_from_array([77u8; 32]);
+        let wrong = Address::new_from_array([77u8; 32]);
         let err =
             verify_swap_dvp_bytes(&wrong, &DVP_SWAP_PROGRAM_ID, &on_chain_bytes(&dvp)).unwrap_err();
         assert!(matches!(err, SwapDvpVerifyError::WrongAddress { .. }));
@@ -582,7 +582,7 @@ mod tests {
     fn verify_rejects_unsupported_token_programs() {
         for leg_b in [false, true] {
             let mut dvp = sample();
-            let fake = Pubkey::new_from_array([6u8; 32]);
+            let fake = Address::new_from_array([6u8; 32]);
             if leg_b {
                 dvp.token_program_b = fake;
             } else {

@@ -2,11 +2,11 @@ use super::test_utils::{transfer_session, TransferAccounts, TransferRequest};
 use super::*;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
+use solana_address::Address;
 use solana_compute_budget_interface::ComputeBudgetInstruction;
 use solana_hash::Hash;
 use solana_instruction::Instruction;
 use solana_message::VersionedMessage;
-use solana_pubkey::Pubkey;
 use solana_rent::Rent;
 use solana_zk_sdk::encryption::elgamal::ElGamalCiphertext;
 use spl_token_2022_interface::extension::confidential_transfer::ConfidentialTransferAccount;
@@ -28,7 +28,7 @@ fn shared_key_and_amount_vectors() {
     ))
     .unwrap();
     let master = unhex(vector["master_key"].as_str().unwrap());
-    let swap: Pubkey = vector["swap_pda"].as_str().unwrap().parse().unwrap();
+    let swap: Address = vector["swap_pda"].as_str().unwrap().parse().unwrap();
     let seed = derive_shared_seed(&swap, |message| -> Result<[u8; 32], ()> {
         let mut mac = Hmac::<Sha256>::new_from_slice(&master).unwrap();
         mac.update(message);
@@ -87,7 +87,7 @@ fn shared_key_and_amount_vectors() {
 fn regenerate_shared_vectors() {
     let master = [0x42; 32];
     let [authority, user_a, user_b, mint_a, mint_b] =
-        [1, 2, 3, 4, 5].map(|b| Pubkey::new_from_array([b; 32]));
+        [1, 2, 3, 4, 5].map(|b| Address::new_from_array([b; 32]));
     let swap =
         crate::verify::find_swap_dvp_address(&authority, &user_a, &user_b, &mint_a, &mint_b, 42).0;
     let seed = derive_shared_seed(&swap, |message| -> Result<[u8; 32], ()> {
@@ -192,13 +192,13 @@ fn recover_false_and_corrupt_ae_balances_above_u32() {
 
 #[test]
 fn history_skips_failed_transactions_and_rejects_missing_context() {
-    let escrow = Pubkey::new_unique();
-    let source = Pubkey::new_unique();
-    let mint = Pubkey::new_unique();
-    let authority = Pubkey::new_unique();
-    let equality = Pubkey::new_unique();
-    let validity = Pubkey::new_unique();
-    let range = Pubkey::new_unique();
+    let escrow = Address::new_unique();
+    let source = Address::new_unique();
+    let mint = Address::new_unique();
+    let authority = Address::new_unique();
+    let equality = Address::new_unique();
+    let validity = Address::new_unique();
+    let range = Address::new_unique();
     use spl_token_confidential_transfer_proof_extraction::instruction::ProofLocation;
     let instructions =
         spl_token_2022_interface::extension::confidential_transfer::instruction::transfer(
@@ -250,7 +250,7 @@ fn apply_with_history_rejects_a_snapshot_that_history_contradicts() {
         ..Default::default()
     };
     let apply = |state: &ConfidentialTransferAccount, history: &[BalanceEvent]| {
-        let pubkey = Pubkey::new_unique();
+        let pubkey = Address::new_unique();
         apply_session(
             &SessionConfig::new(pubkey, TransactionFormat::V1, Default::default()),
             &ApplyConfidentialDvp {
@@ -300,13 +300,13 @@ fn apply_with_history_rejects_a_snapshot_that_history_contradicts() {
 #[test]
 fn oversized_plan_returns_an_error() {
     let config = SessionConfig::new(
-        Pubkey::new_unique(),
+        Address::new_unique(),
         TransactionFormat::V0,
         Default::default(),
     );
     let plan = PlannedTransaction {
         instructions: vec![solana_instruction::Instruction {
-            program_id: Pubkey::new_unique(),
+            program_id: Address::new_unique(),
             accounts: vec![],
             data: vec![0; config.transaction_limit()],
         }],
@@ -338,8 +338,8 @@ fn proof_accounts_reject_rent_above_the_default() {
         (rent(default + 1), false),
         (rent(u64::MAX), false),
     ] {
-        let config = SessionConfig::new(Pubkey::new_unique(), TransactionFormat::V1, rent);
-        let result = super::transaction::SessionBuilder::new(&config, Pubkey::new_unique())
+        let config = SessionConfig::new(Address::new_unique(), TransactionFormat::V1, rent);
+        let result = super::transaction::SessionBuilder::new(&config, Address::new_unique())
             .proof(ProofInstruction::VerifyZeroCiphertext, &zero);
         assert_eq!(result.is_ok(), accepted);
     }
@@ -354,7 +354,7 @@ fn payer_and_authority_can_use_the_same_signer() {
         signers: vec![],
         instructions: vec![solana_system_interface::instruction::transfer(
             &wallet.pubkey(),
-            &Pubkey::new_unique(),
+            &Address::new_unique(),
             1,
         )],
     };
@@ -378,11 +378,11 @@ fn truncated_record_history_returns_an_error() {
     }
     .pack();
     for len in [1, 8, write.len() - 1] {
-        let mut history = BalanceHistory::new(Pubkey::new_unique());
+        let mut history = BalanceHistory::new(Address::new_unique());
         let transaction = ExecutedTransaction {
             instructions: vec![Instruction {
                 program_id: RECORD_PROGRAM_ID,
-                accounts: vec![AccountMeta::new(Pubkey::new_unique(), false)],
+                accounts: vec![AccountMeta::new(Address::new_unique(), false)],
                 data: write[..len].to_vec(),
             }],
             inner_instructions: Default::default(),
@@ -426,13 +426,13 @@ fn history_decodes_inline_and_record_validity_proofs() {
         &keys.opening_hi,
     )
     .unwrap();
-    let escrow = Pubkey::new_unique();
-    let source = Pubkey::new_unique();
-    let mint = Pubkey::new_unique();
-    let authority = Pubkey::new_unique();
-    let equality = Pubkey::new_unique();
-    let validity = Pubkey::new_unique();
-    let range = Pubkey::new_unique();
+    let escrow = Address::new_unique();
+    let source = Address::new_unique();
+    let mint = Address::new_unique();
+    let authority = Address::new_unique();
+    let equality = Address::new_unique();
+    let validity = Address::new_unique();
+    let range = Address::new_unique();
     let transfer = |location| {
         spl_token_2022_interface::extension::confidential_transfer::instruction::transfer(
             &spl_token_2022_interface::ID,
@@ -454,7 +454,7 @@ fn history_decodes_inline_and_record_validity_proofs() {
         std::num::NonZeroI8::new(1).unwrap(),
         &proof,
     ));
-    let record = Pubkey::new_unique();
+    let record = Address::new_unique();
     let record_ix = |instruction: spl_record::instruction::RecordInstruction<'_>| Instruction {
         program_id: RECORD_PROGRAM_ID,
         accounts: vec![AccountMeta::new(record, false)],
@@ -581,12 +581,12 @@ fn validity_verification_without_authority_keeps_the_real_context() {
     );
     let attacker = EscrowKeys::from_seed(&[4; 32]).unwrap();
     let (forged, _, _) = proof([&attacker, &attacker, &attacker], 7, 1);
-    let escrow = Pubkey::new_unique();
-    let authority = Pubkey::new_unique();
-    let equality = Pubkey::new_unique();
-    let validity = Pubkey::new_unique();
-    let range = Pubkey::new_unique();
-    let record = Pubkey::new_unique();
+    let escrow = Address::new_unique();
+    let authority = Address::new_unique();
+    let equality = Address::new_unique();
+    let validity = Address::new_unique();
+    let range = Address::new_unique();
+    let record = Address::new_unique();
     let verify = ProofInstruction::VerifyBatchedGroupedCiphertext3HandlesValidity;
     // Without the authority account the proof program verifies and creates
     // nothing, so these must not replace the real context.
@@ -618,8 +618,8 @@ fn validity_verification_without_authority_keeps_the_real_context() {
         instructions.extend(
             spl_token_2022_interface::extension::confidential_transfer::instruction::transfer(
                 &spl_token_2022_interface::ID,
-                &Pubkey::new_unique(),
-                &Pubkey::new_unique(),
+                &Address::new_unique(),
+                &Address::new_unique(),
                 &escrow,
                 &Default::default(),
                 &Default::default(),
@@ -682,21 +682,21 @@ fn transfer_with_fee_replays_as_transfer_in_both_directions() {
         &keys[1].opening_hi,
     )
     .unwrap();
-    let (source, destination) = (Pubkey::new_unique(), Pubkey::new_unique());
+    let (source, destination) = (Address::new_unique(), Address::new_unique());
     let transfer =
         spl_token_2022_interface::extension::confidential_transfer::instruction::transfer(
             &spl_token_2022_interface::ID,
             &source,
-            &Pubkey::new_unique(),
+            &Address::new_unique(),
             &destination,
             &Default::default(),
             &Default::default(),
             &Default::default(),
-            &Pubkey::new_unique(),
+            &Address::new_unique(),
             &[],
-            ProofLocation::ContextStateAccount(&Pubkey::new_unique()),
+            ProofLocation::ContextStateAccount(&Address::new_unique()),
             ProofLocation::InstructionOffset(std::num::NonZeroI8::new(1).unwrap(), &proof),
-            ProofLocation::ContextStateAccount(&Pubkey::new_unique()),
+            ProofLocation::ContextStateAccount(&Address::new_unique()),
         )
         .unwrap();
     // On a mint without TransferFeeConfig, Token-2022 runs TransferWithFee
@@ -721,7 +721,7 @@ fn transfer_with_fee_replays_as_transfer_in_both_directions() {
             fee_ciphertext_validity_proof_instruction_offset: 0,
             range_proof_instruction_offset: data.range_proof_instruction_offset,
         }));
-    let replay = |escrow: Pubkey, instructions: &Vec<Instruction>| {
+    let replay = |escrow: Address, instructions: &Vec<Instruction>| {
         let mut history = BalanceHistory::new(escrow);
         history
             .push(&ExecutedTransaction {
@@ -748,9 +748,9 @@ fn v1_rejects_too_many_addresses_before_signing() {
     let config = SessionConfig::new(payer.pubkey(), TransactionFormat::V1, Default::default());
     let mut plan = PlannedTransaction {
         instructions: vec![Instruction {
-            program_id: Pubkey::new_unique(),
+            program_id: Address::new_unique(),
             accounts: (0..64)
-                .map(|_| AccountMeta::new_readonly(Pubkey::new_unique(), false))
+                .map(|_| AccountMeta::new_readonly(Address::new_unique(), false))
                 .collect(),
             data: vec![],
         }],
@@ -774,7 +774,7 @@ fn v1_rejects_too_many_addresses_before_signing() {
 fn outgoing_preflight_reports_balance_and_recipient_errors() {
     let keys = EscrowKeys::from_seed(&[21; 32]).unwrap();
     let config = SessionConfig::new(
-        Pubkey::new_unique(),
+        Address::new_unique(),
         TransactionFormat::V1,
         Default::default(),
     );
@@ -796,9 +796,9 @@ fn outgoing_preflight_reports_balance_and_recipient_errors() {
             &config,
             TransferAccounts {
                 authority: config.payer,
-                source: Pubkey::new_unique(),
-                mint: Pubkey::new_unique(),
-                destination: Pubkey::new_unique(),
+                source: Address::new_unique(),
+                mint: Address::new_unique(),
+                destination: Address::new_unique(),
             },
             TransferRequest {
                 source: TransferSource {
@@ -852,15 +852,15 @@ fn rpc_history_rejects_incomplete_or_malformed_metadata() {
     use solana_message::AddressLookupTableAccount;
     use solana_transaction::versioned::VersionedTransaction;
     use solana_transaction_status_client_types::EncodedTransactionWithStatusMeta;
-    let looked_up = Pubkey::new_unique();
-    let program = Pubkey::new_unique();
+    let looked_up = Address::new_unique();
+    let program = Address::new_unique();
     let mut config = SessionConfig::new(
-        Pubkey::new_unique(),
+        Address::new_unique(),
         TransactionFormat::V0,
         Default::default(),
     );
     config.lookup_tables.push(AddressLookupTableAccount {
-        key: Pubkey::new_unique(),
+        key: Address::new_unique(),
         addresses: vec![looked_up],
     });
     let message = PlannedTransaction {
@@ -940,7 +940,7 @@ fn rpc_history_rejects_incomplete_or_malformed_metadata() {
 fn plan(payload: usize) -> PlannedTransaction {
     PlannedTransaction {
         instructions: vec![Instruction {
-            program_id: Pubkey::new_unique(),
+            program_id: Address::new_unique(),
             accounts: vec![],
             data: vec![0; payload],
         }],
@@ -951,7 +951,7 @@ fn plan(payload: usize) -> PlannedTransaction {
 #[test]
 fn priority_fee_uses_micro_lamports_in_v0_and_total_lamports_in_v1() {
     for format in [TransactionFormat::V0, TransactionFormat::V1] {
-        let mut config = SessionConfig::new(Pubkey::new_unique(), format, Rent::default());
+        let mut config = SessionConfig::new(Address::new_unique(), format, Rent::default());
         // 400k CU at 1 micro-lamport rounds up to one lamport, not zero.
         for (price, total) in [
             (None, None),
@@ -986,8 +986,11 @@ fn priority_fee_uses_micro_lamports_in_v0_and_total_lamports_in_v1() {
 
 #[test]
 fn v1_priority_fee_rejects_total_lamport_overflow() {
-    let mut config =
-        SessionConfig::new(Pubkey::new_unique(), TransactionFormat::V1, Rent::default());
+    let mut config = SessionConfig::new(
+        Address::new_unique(),
+        TransactionFormat::V1,
+        Rent::default(),
+    );
     config.compute_unit_limit = 1_400_000;
     config.compute_unit_price = Some(u64::MAX);
     assert!(matches!(
@@ -999,7 +1002,7 @@ fn v1_priority_fee_rejects_total_lamport_overflow() {
 #[test]
 fn priority_fee_counts_toward_the_transaction_size_limit() {
     for format in [TransactionFormat::V0, TransactionFormat::V1] {
-        let mut config = SessionConfig::new(Pubkey::new_unique(), format, Rent::default());
+        let mut config = SessionConfig::new(Address::new_unique(), format, Rent::default());
         // Find the largest payload accepted without a fee, including length-prefix changes.
         let mut plan = plan(0);
         while plan.wire_size(&config).is_ok() {
