@@ -1,6 +1,8 @@
 use dvp_swap_program_client::{DvpSwapProgramError, DVP_SWAP_PROGRAM_ID};
 use litesvm::{types::TransactionMetadata, LiteSVM};
 use solana_account::Account;
+use solana_address::address;
+use solana_address::Address;
 use solana_clock::Clock;
 use solana_instruction::{AccountMeta, Instruction};
 use solana_keypair::Keypair;
@@ -8,8 +10,6 @@ use solana_nullable::MaybeNull;
 use solana_packet::PACKET_DATA_SIZE;
 use solana_program_option::COption;
 use solana_program_pack::Pack;
-use solana_pubkey::pubkey;
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 use solana_transaction::Transaction;
 use spl_associated_token_account_interface::{
@@ -37,20 +37,21 @@ use spl_token_interface::state::{Account as TokenAccount, Mint};
 pub use spl_token_2022_interface::ID as TOKEN_2022_PROGRAM_ID;
 pub use spl_token_interface::ID as TOKEN_PROGRAM_ID;
 
-pub const ATA_PROGRAM_ID: Pubkey = pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
-pub const MEMO_PROGRAM_ID: Pubkey = pubkey!("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
-pub const SWAP_PROGRAM_ID: Pubkey = DVP_SWAP_PROGRAM_ID;
+pub const ATA_PROGRAM_ID: Address = address!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+pub const MEMO_PROGRAM_ID: Address = address!("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
+pub const SWAP_PROGRAM_ID: Address = DVP_SWAP_PROGRAM_ID;
 
 /// Program ID of the no-op transfer-hook fixture loaded into LiteSVM
 /// for hook-bearing Token-2022 lifecycle tests. Matches
 /// `declare_id!` in `dvp-swap-program/tests/transfer-hook-fixture/src/lib.rs`.
-pub const HOOK_FIXTURE_PROGRAM_ID: Pubkey = pubkey!("HookqJupt6Khm8s8jB3p93NkhPoiAg2M7vkEhkS15CtC");
+pub const HOOK_FIXTURE_PROGRAM_ID: Address =
+    address!("HookqJupt6Khm8s8jB3p93NkhPoiAg2M7vkEhkS15CtC");
 
 /// Program ID of the smart-wallet fixture loaded into LiteSVM for
 /// Squads-style (vault PDA signs via CPI) party tests. Matches
 /// `declare_id!` in `dvp-swap-program/tests/smart-wallet-fixture/src/lib.rs`.
-pub const SMART_WALLET_FIXTURE_PROGRAM_ID: Pubkey =
-    pubkey!("H5tY4bRL6jk62vkxeytUVVjYDjBWgV6FQMvgnmaJNuNz");
+pub const SMART_WALLET_FIXTURE_PROGRAM_ID: Address =
+    address!("H5tY4bRL6jk62vkxeytUVVjYDjBWgV6FQMvgnmaJNuNz");
 
 pub const SWAP_DVP_SEED: &[u8] = b"dvp";
 pub const NONCE_TOMBSTONE_SEED: &[u8] = b"nonce";
@@ -112,7 +113,7 @@ fn load_external_programs(svm: &mut LiteSVM) {
     });
     svm.add_program(TOKEN_2022_PROGRAM_ID, TOKEN).unwrap();
     svm.add_program(
-        pubkey!("recr1L3PCGKLbckBqMNcJhuuyU1zgo8nBhfLVsJNwr5"),
+        address!("recr1L3PCGKLbckBqMNcJhuuyU1zgo8nBhfLVsJNwr5"),
         RECORD,
     )
     .unwrap();
@@ -173,7 +174,7 @@ impl TestContext {
         });
     }
 
-    pub fn airdrop_if_required(&mut self, pubkey: &Pubkey, lamports: u64) {
+    pub fn airdrop_if_required(&mut self, pubkey: &Address, lamports: u64) {
         let needs = match self.svm.get_account(pubkey) {
             Some(account) => account.lamports < MIN_LAMPORTS,
             None => true,
@@ -211,7 +212,7 @@ impl TestContext {
             .map_err(|e| format!("{:?}", e))
     }
 
-    pub fn get_account(&self, pubkey: &Pubkey) -> Option<Account> {
+    pub fn get_account(&self, pubkey: &Address) -> Option<Account> {
         self.svm.get_account(pubkey)
     }
 }
@@ -224,7 +225,7 @@ impl Default for TestContext {
 
 /// The wrapped-SOL (native) mint, owned by legacy SPL Token. LiteSVM does
 /// not seed this account, so tests must write it with `set_native_mint`.
-pub const NATIVE_MINT: Pubkey = spl_token_interface::native_mint::ID;
+pub const NATIVE_MINT: Address = spl_token_interface::native_mint::ID;
 
 /// Write the wrapped-SOL mint (decimals 9, SPL Token) at its canonical
 /// address so WSOL legs can be exercised.
@@ -245,7 +246,7 @@ pub fn set_native_mint(context: &mut TestContext) {
 /// For Token-2022 mints with extensions use one of the
 /// `set_mint_2022_with_*` builders below — they pack a proper TLV layout
 /// the program will see exactly as a real on-chain mint.
-pub fn set_mint(context: &mut TestContext, mint: &Pubkey, token_program: &Pubkey) {
+pub fn set_mint(context: &mut TestContext, mint: &Address, token_program: &Address) {
     if *token_program == TOKEN_PROGRAM_ID {
         let mint_state = Mint {
             decimals: 6,
@@ -276,9 +277,9 @@ pub fn set_mint(context: &mut TestContext, mint: &Pubkey, token_program: &Pubkey
 /// Like `set_mint`, but writes a chosen mint authority instead of `None`.
 pub fn set_mint_with_authority(
     context: &mut TestContext,
-    mint: &Pubkey,
-    token_program: &Pubkey,
-    mint_authority: Option<Pubkey>,
+    mint: &Address,
+    token_program: &Address,
+    mint_authority: Option<Address>,
 ) {
     let authority = mint_authority.map_or(COption::None, COption::Some);
     if *token_program == TOKEN_PROGRAM_ID {
@@ -314,11 +315,11 @@ pub fn set_mint_with_authority(
 /// the program's transfer/close CPIs don't depend on them.
 pub fn set_token_balance(
     context: &mut TestContext,
-    ata: &Pubkey,
-    mint: &Pubkey,
-    owner: &Pubkey,
+    ata: &Address,
+    mint: &Address,
+    owner: &Address,
     amount: u64,
-    token_program: &Pubkey,
+    token_program: &Address,
 ) {
     let data = if *token_program == TOKEN_PROGRAM_ID {
         let acct = TokenAccount {
@@ -358,14 +359,14 @@ pub fn set_token_balance(
 /// multisig is a data account owned by the token program, not a wallet:
 /// it can authorize token operations but can never itself sign a
 /// transaction, so it is not a valid DvP party.
-pub fn set_token_multisig(context: &mut TestContext, address: &Pubkey, token_program: &Pubkey) {
+pub fn set_token_multisig(context: &mut TestContext, address: &Address, token_program: &Address) {
     use spl_token_interface::state::Multisig;
 
     let mut multisig = Multisig {
         m: 1,
         n: 1,
         is_initialized: true,
-        signers: [Pubkey::default(); 11],
+        signers: [Address::default(); 11],
     };
     multisig.signers[0] = Keypair::new().pubkey();
     let mut data = vec![0u8; Multisig::LEN];
@@ -376,10 +377,10 @@ pub fn set_token_multisig(context: &mut TestContext, address: &Pubkey, token_pro
 pub fn fund_wallet_ata(
     context: &mut TestContext,
     wallet: &Keypair,
-    mint: &Pubkey,
+    mint: &Address,
     amount: u64,
-    token_program: &Pubkey,
-) -> Pubkey {
+    token_program: &Address,
+) -> Address {
     context.airdrop_if_required(&wallet.pubkey(), 1_000_000_000);
     let ata = get_associated_token_address_with_program_id(&wallet.pubkey(), mint, token_program);
     let create_ata_ix = create_associated_token_account_idempotent(
@@ -397,10 +398,10 @@ pub fn fund_wallet_ata(
 /// for ATAs that the program will write into (settle recipient ATAs).
 pub fn create_ata(
     context: &mut TestContext,
-    wallet: &Pubkey,
-    mint: &Pubkey,
-    token_program: &Pubkey,
-) -> Pubkey {
+    wallet: &Address,
+    mint: &Address,
+    token_program: &Address,
+) -> Address {
     let create_ix = create_associated_token_account_idempotent(
         &context.payer.pubkey(),
         wallet,
@@ -413,7 +414,7 @@ pub fn create_ata(
 
 /// Read the token account `amount`. Works for both SPL Token and
 /// Token-2022 since both layouts share the first 165 bytes.
-pub fn get_token_balance(context: &TestContext, ata: &Pubkey) -> u64 {
+pub fn get_token_balance(context: &TestContext, ata: &Address) -> u64 {
     match context.get_account(ata) {
         Some(account)
             if account.owner == TOKEN_PROGRAM_ID || account.owner == TOKEN_2022_PROGRAM_ID =>
@@ -427,15 +428,15 @@ pub fn get_token_balance(context: &TestContext, ata: &Pubkey) -> u64 {
 }
 
 pub fn swap_dvp_pda(
-    settlement_authority: &Pubkey,
-    user_a: &Pubkey,
-    user_b: &Pubkey,
-    mint_a: &Pubkey,
-    mint_b: &Pubkey,
+    settlement_authority: &Address,
+    user_a: &Address,
+    user_b: &Address,
+    mint_a: &Address,
+    mint_b: &Address,
     nonce: u64,
-) -> (Pubkey, u8) {
+) -> (Address, u8) {
     let nonce_bytes = nonce.to_le_bytes();
-    Pubkey::find_program_address(
+    Address::find_program_address(
         &[
             SWAP_DVP_SEED,
             settlement_authority.as_ref(),
@@ -449,15 +450,15 @@ pub fn swap_dvp_pda(
     )
 }
 
-pub fn nonce_tombstone_pda(swap_dvp: &Pubkey) -> (Pubkey, u8) {
-    Pubkey::find_program_address(&[NONCE_TOMBSTONE_SEED, swap_dvp.as_ref()], &SWAP_PROGRAM_ID)
+pub fn nonce_tombstone_pda(swap_dvp: &Address) -> (Address, u8) {
+    Address::find_program_address(&[NONCE_TOMBSTONE_SEED, swap_dvp.as_ref()], &SWAP_PROGRAM_ID)
 }
 
 /// Vault PDA of the smart-wallet fixture for `vault_index`. Used as a
 /// DvP party address to model a Squads-style vault: it can never sign a
 /// transaction directly, only via the fixture's CPI.
-pub fn smart_wallet_vault_pda(vault_index: u8) -> Pubkey {
-    Pubkey::find_program_address(
+pub fn smart_wallet_vault_pda(vault_index: u8) -> Address {
+    Address::find_program_address(
         &[SMART_WALLET_VAULT_SEED, &[vault_index]],
         &SMART_WALLET_FIXTURE_PROGRAM_ID,
     )
@@ -489,7 +490,7 @@ pub fn wrap_via_smart_wallet(inner: Instruction, vault_index: u8) -> Instruction
     }
 }
 
-pub fn dvp_ata(swap_dvp: &Pubkey, mint: &Pubkey, token_program: &Pubkey) -> Pubkey {
+pub fn dvp_ata(swap_dvp: &Address, mint: &Address, token_program: &Address) -> Address {
     get_associated_token_address_with_program_id(swap_dvp, mint, token_program)
 }
 
@@ -568,9 +569,9 @@ fn build_mint_2022_with_extensions(
 #[inline]
 fn write_account(
     context: &mut TestContext,
-    pubkey: &Pubkey,
+    pubkey: &Address,
     data: Vec<u8>,
-    owner: Pubkey,
+    owner: Address,
     lamports: u64,
 ) {
     context
@@ -590,8 +591,8 @@ fn write_account(
 
 pub fn set_mint_2022_with_permanent_delegate(
     context: &mut TestContext,
-    mint: &Pubkey,
-    delegate: &Pubkey,
+    mint: &Address,
+    delegate: &Address,
 ) {
     let data = build_mint_2022_with_extensions(&[ExtensionType::PermanentDelegate], |state| {
         let ext = state.init_extension::<PermanentDelegate>(true).unwrap();
@@ -600,7 +601,7 @@ pub fn set_mint_2022_with_permanent_delegate(
     write_account(context, mint, data, TOKEN_2022_PROGRAM_ID, 1_000_000_000);
 }
 
-pub fn set_mint_2022_with_pausable(context: &mut TestContext, mint: &Pubkey, authority: &Pubkey) {
+pub fn set_mint_2022_with_pausable(context: &mut TestContext, mint: &Address, authority: &Address) {
     let data = build_mint_2022_with_extensions(&[ExtensionType::Pausable], |state| {
         let ext = state.init_extension::<PausableConfig>(true).unwrap();
         *ext = PausableConfig {
@@ -613,9 +614,9 @@ pub fn set_mint_2022_with_pausable(context: &mut TestContext, mint: &Pubkey, aut
 
 pub fn set_mint_2022_with_transfer_hook(
     context: &mut TestContext,
-    mint: &Pubkey,
-    hook_program_id: &Pubkey,
-    authority: &Pubkey,
+    mint: &Address,
+    hook_program_id: &Address,
+    authority: &Address,
 ) {
     let data = build_mint_2022_with_extensions(&[ExtensionType::TransferHook], |state| {
         let ext = state.init_extension::<TransferHook>(true).unwrap();
@@ -638,9 +639,9 @@ pub fn set_mint_2022_with_transfer_hook(
 /// data stomped by `set_token_balance`).
 pub fn set_token_2022_with_hook_account(
     context: &mut TestContext,
-    ata: &Pubkey,
-    mint: &Pubkey,
-    owner: &Pubkey,
+    ata: &Address,
+    mint: &Address,
+    owner: &Address,
     amount: u64,
 ) {
     use spl_token_2022_interface::pod::PodCOption;
@@ -671,9 +672,9 @@ pub fn set_token_2022_with_hook_account(
 /// transfers then require a preceding Memo-program instruction.
 pub fn set_token_2022_with_memo_required(
     context: &mut TestContext,
-    ata: &Pubkey,
-    mint: &Pubkey,
-    owner: &Pubkey,
+    ata: &Address,
+    mint: &Address,
+    owner: &Address,
     amount: u64,
 ) {
     use spl_token_2022_interface::extension::memo_transfer::MemoTransfer;
@@ -706,9 +707,9 @@ pub fn set_token_2022_with_memo_required(
 /// Returns the validation PDA to append to the transfer's extra accounts.
 pub fn set_hook_extra_account_metas(
     context: &mut TestContext,
-    mint: &Pubkey,
+    mint: &Address,
     extras: &[AccountMeta],
-) -> Pubkey {
+) -> Address {
     use spl_tlv_account_resolution::{account::ExtraAccountMeta, state::ExtraAccountMetaList};
     use spl_transfer_hook_interface::{
         get_extra_account_metas_address, instruction::ExecuteInstruction,
@@ -745,7 +746,7 @@ pub fn set_hook_extra_account_metas(
 /// declared here = **6**. Use [`hook_extras_for_mint`] to get the
 /// trailing accounts the client must pass to Settle/Cancel/Reject/Reclaim
 /// for this mint.
-pub fn setup_hook_mint(context: &mut TestContext, mint: &Pubkey) {
+pub fn setup_hook_mint(context: &mut TestContext, mint: &Address) {
     set_mint_2022_with_transfer_hook(
         context,
         mint,
@@ -769,7 +770,7 @@ pub fn setup_hook_mint(context: &mut TestContext, mint: &Pubkey) {
 /// [`setup_hook_mint`]. Order matches `spl_transfer_hook_interface`'s
 /// offchain resolver: declared extras first, then the hook program ID,
 /// then the validation PDA.
-pub fn hook_extras_for_mint(mint: &Pubkey) -> Vec<solana_instruction::AccountMeta> {
+pub fn hook_extras_for_mint(mint: &Address) -> Vec<solana_instruction::AccountMeta> {
     use solana_instruction::AccountMeta;
     use spl_transfer_hook_interface::get_extra_account_metas_address;
 
@@ -788,9 +789,9 @@ pub fn hook_extras_for_mint(mint: &Pubkey) -> Vec<solana_instruction::AccountMet
 /// strips that bit before forwarding to the hook.
 pub fn setup_malicious_hook_mint(
     context: &mut TestContext,
-    mint: &Pubkey,
-    victim: &Pubkey,
-    attacker: &Pubkey,
+    mint: &Address,
+    victim: &Address,
+    attacker: &Address,
 ) {
     set_mint_2022_with_transfer_hook(
         context,
@@ -817,9 +818,9 @@ pub fn setup_malicious_hook_mint(
 /// victim (marked writable so the client resolver would forward its
 /// runtime signer bit), attacker, hook program, validation PDA.
 pub fn malicious_hook_extras(
-    mint: &Pubkey,
-    victim: &Pubkey,
-    attacker: &Pubkey,
+    mint: &Address,
+    victim: &Address,
+    attacker: &Address,
 ) -> Vec<solana_instruction::AccountMeta> {
     use solana_instruction::AccountMeta;
     use spl_transfer_hook_interface::get_extra_account_metas_address;
@@ -837,8 +838,8 @@ pub fn malicious_hook_extras(
 /// TransferFeeConfig with the same initial rate in both schedule entries.
 pub fn set_mint_2022_with_transfer_fee(
     context: &mut TestContext,
-    mint: &Pubkey,
-    authority: &Pubkey,
+    mint: &Address,
+    authority: &Address,
     basis_points: u16,
     maximum_fee: u64,
 ) {
@@ -859,7 +860,7 @@ pub fn set_mint_2022_with_transfer_fee(
         ext.newer_transfer_fee = ext.older_transfer_fee;
         // Suppress unused-import / dead-field warnings for PodCOption when
         // some downstream `TransferFee` field types change versions.
-        let _ = PodCOption::<Pubkey>::default();
+        let _ = PodCOption::<Address>::default();
     });
     write_account(context, mint, data, TOKEN_2022_PROGRAM_ID, 1_000_000_000);
 }
@@ -867,8 +868,8 @@ pub fn set_mint_2022_with_transfer_fee(
 /// InterestBearingConfig with a non-zero rate for lifecycle tests.
 pub fn set_mint_2022_with_interest_bearing(
     context: &mut TestContext,
-    mint: &Pubkey,
-    authority: &Pubkey,
+    mint: &Address,
+    authority: &Address,
 ) {
     let now = context.now();
     let data = build_mint_2022_with_extensions(&[ExtensionType::InterestBearingConfig], |state| {
@@ -885,8 +886,8 @@ pub fn set_mint_2022_with_interest_bearing(
 /// ScaledUiAmountConfig with a non-unit multiplier for lifecycle tests.
 pub fn set_mint_2022_with_scaled_ui_amount(
     context: &mut TestContext,
-    mint: &Pubkey,
-    authority: &Pubkey,
+    mint: &Address,
+    authority: &Address,
 ) {
     let data = build_mint_2022_with_extensions(&[ExtensionType::ScaledUiAmount], |state| {
         let ext = state.init_extension::<ScaledUiAmountConfig>(true).unwrap();
@@ -900,7 +901,7 @@ pub fn set_mint_2022_with_scaled_ui_amount(
 
 /// NonTransferable — blocked; used in negative tests. A balance reaching
 /// a non-transferable escrow can never be drained, so Create rejects it.
-pub fn set_mint_2022_with_non_transferable(context: &mut TestContext, mint: &Pubkey) {
+pub fn set_mint_2022_with_non_transferable(context: &mut TestContext, mint: &Address) {
     let data = build_mint_2022_with_extensions(&[ExtensionType::NonTransferable], |state| {
         state.init_extension::<NonTransferable>(true).unwrap();
     });
@@ -910,8 +911,8 @@ pub fn set_mint_2022_with_non_transferable(context: &mut TestContext, mint: &Pub
 /// ConfidentialTransferMint: allowed; used in the lifecycle test.
 pub fn set_mint_2022_with_confidential_transfer(
     context: &mut TestContext,
-    mint: &Pubkey,
-    authority: &Pubkey,
+    mint: &Address,
+    authority: &Address,
 ) {
     let data =
         build_mint_2022_with_extensions(&[ExtensionType::ConfidentialTransferMint], |state| {
@@ -929,8 +930,8 @@ pub fn set_mint_2022_with_confidential_transfer(
 /// ConfidentialTransferFeeConfig Token-2022 requires alongside it.
 pub fn set_mint_2022_with_confidential_transfer_fee(
     context: &mut TestContext,
-    mint: &Pubkey,
-    authority: &Pubkey,
+    mint: &Address,
+    authority: &Address,
 ) {
     let data = build_mint_2022_with_extensions(
         &[

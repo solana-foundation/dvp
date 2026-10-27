@@ -14,10 +14,10 @@ use dvp_swap_program_client::{
     confidential::*,
     instructions::{CancelConfidentialDvp, CancelConfidentialDvpInstructionArgs},
 };
+use solana_address::Address;
 use solana_instruction::{AccountMeta, Instruction};
 use solana_keypair::Keypair;
 use solana_program_error::ProgramError;
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 use spl_tlv_account_resolution::{
     account::ExtraAccountMeta, seeds::Seed, state::ExtraAccountMetaList,
@@ -66,7 +66,7 @@ fn client_hooked_settle_resolves_hidden_amount_and_emits_memos() {
         .svm
         .minimum_balance_for_rent_exemption(account.data.len());
     context.svm.set_account(validation, account).unwrap();
-    let hidden_pda = solana_pubkey::Pubkey::find_program_address(
+    let hidden_pda = solana_address::Address::find_program_address(
         &[&u64::MAX.to_le_bytes()],
         &HOOK_FIXTURE_PROGRAM_ID,
     )
@@ -293,8 +293,8 @@ fn client_hooked_funding_and_refund_in_both_formats() {
 
 #[test]
 fn hook_extras_preserve_order_and_writable_but_remove_signers() {
-    let leg_a = [AccountMeta::new(Pubkey::new_unique(), true)];
-    let leg_b = [AccountMeta::new_readonly(Pubkey::new_unique(), true)];
+    let leg_a = [AccountMeta::new(Address::new_unique(), true)];
+    let leg_b = [AccountMeta::new_readonly(Address::new_unique(), true)];
     let ix = refund_with_hook_extras(&leg_a, &leg_b).unwrap();
 
     // Sanitization must preserve leg ordering, addresses, and writable privileges.
@@ -326,8 +326,8 @@ fn hook_extras_limit_applies_separately_to_each_leg() {
 
 #[test]
 fn hook_resolver_preserves_writable_but_removes_signers() {
-    let writable = Pubkey::new_unique();
-    let readonly = Pubkey::new_unique();
+    let writable = Address::new_unique();
+    let readonly = Address::new_unique();
     let data = hook_list(&[
         ExtraAccountMeta::new_with_pubkey(&writable, true, true).unwrap(),
         ExtraAccountMeta::new_with_pubkey(&readonly, true, false).unwrap(),
@@ -427,7 +427,7 @@ fn hook_resolver_preserves_fetch_error() {
     ));
 }
 
-fn require_memo(context: &mut TestContext, f: &ClientFixture, address: Pubkey, owner: &Keypair) {
+fn require_memo(context: &mut TestContext, f: &ClientFixture, address: Address, owner: &Keypair) {
     send_v1(
         context,
         &[
@@ -449,7 +449,7 @@ fn require_memo(context: &mut TestContext, f: &ClientFixture, address: Pubkey, o
 
 fn hook_extras(count: usize) -> Vec<AccountMeta> {
     (0..count)
-        .map(|_| AccountMeta::new_readonly(Pubkey::new_unique(), false))
+        .map(|_| AccountMeta::new_readonly(Address::new_unique(), false))
         .collect()
 }
 
@@ -460,14 +460,14 @@ fn hook_list(entries: &[ExtraAccountMeta]) -> Vec<u8> {
 }
 
 fn resolve_hook_accounts(
-    fetch: impl Fn(Pubkey) -> AccountDataResult,
+    fetch: impl Fn(Address) -> AccountDataResult,
 ) -> Result<Vec<AccountMeta>, ConfidentialError> {
     futures::executor::block_on(resolve_confidential_hook_accounts(
         &HOOK_FIXTURE_PROGRAM_ID,
-        &Pubkey::new_unique(),
-        &Pubkey::new_unique(),
-        &Pubkey::new_unique(),
-        &Pubkey::new_unique(),
+        &Address::new_unique(),
+        &Address::new_unique(),
+        &Address::new_unique(),
+        &Address::new_unique(),
         |key| std::future::ready(fetch(key)),
     ))
 }
@@ -478,19 +478,19 @@ fn refund_with_hook_extras(
 ) -> Result<Instruction, ConfidentialError> {
     // A no-proof Cancel exercises the public builder without accounts on a ledger.
     let config = SessionConfig::new(
-        Pubkey::new_unique(),
+        Address::new_unique(),
         TransactionFormat::V1,
         Default::default(),
     );
     let accounts = CancelConfidentialDvp {
         settlement_authority: config.payer,
-        swap_dvp: Pubkey::new_unique(),
-        mint_a: Pubkey::new_unique(),
-        mint_b: Pubkey::new_unique(),
-        dvp_ata_a: Pubkey::new_unique(),
-        dvp_ata_b: Pubkey::new_unique(),
-        user_a_ata_a: Pubkey::new_unique(),
-        user_b_ata_b: Pubkey::new_unique(),
+        swap_dvp: Address::new_unique(),
+        mint_a: Address::new_unique(),
+        mint_b: Address::new_unique(),
+        dvp_ata_a: Address::new_unique(),
+        dvp_ata_b: Address::new_unique(),
+        user_a_ata_a: Address::new_unique(),
+        user_b_ata_b: Address::new_unique(),
         token_program_a: crate::utils::TOKEN_PROGRAM_ID,
         token_program_b: TOKEN,
         memo_program: MEMO_PROGRAM_ID,
@@ -526,7 +526,7 @@ fn hook_with_prefunded_validation_pda_settles() {
 fn settle_without_validation_list(prefund: bool) {
     let mut context = TestContext::new();
     let f = ClientFixture::with_hook(&mut context, TransactionFormat::V1, AMOUNT_B, true);
-    let hook = Pubkey::new_unique();
+    let hook = Address::new_unique();
     context
         .svm
         .add_program(

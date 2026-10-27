@@ -15,8 +15,8 @@ use dvp_swap_program_client::{
     verify::SWAP_DVP_ACCOUNT_LEN, DvpSwapProgramError as Error,
 };
 use solana_account::Account;
+use solana_address::Address;
 use solana_instruction::{error::InstructionError, Instruction};
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 use spl_token_2022_interface::{
     error::TokenError,
@@ -62,8 +62,8 @@ fn create_configures_escrow_and_preserves_terms() {
     for hook in [false, true] {
         let mut context = TestContext::new();
         let mut f = ConfidentialDvpFixture::new(&mut context, true, hook);
-        let destination_a = Pubkey::new_unique();
-        let destination_b = Pubkey::new_unique();
+        let destination_a = Address::new_unique();
+        let destination_b = Address::new_unique();
         let earliest = context.now() + 60;
         f.args.ref_string = Some("CT-TRADE".into());
         f.args.user_a_settlement_destination = Some(destination_a);
@@ -403,10 +403,10 @@ fn create_reuses_public_argument_and_account_checks() {
     }
     // Account positions are the shared public Create prefix.
     for (index, address, expected) in [
-        (1, Pubkey::new_unique(), InstructionError::InvalidSeeds), // swap PDA
+        (1, Address::new_unique(), InstructionError::InvalidSeeds), // swap PDA
         (
             2,
-            Pubkey::new_unique(),
+            Address::new_unique(),
             InstructionError::InvalidAccountData,
         ), // tombstone
         (
@@ -433,7 +433,8 @@ fn create_reuses_public_argument_and_account_checks() {
     }
     let mut instructions = f.create_instructions();
     // Use a different payer so the transaction fee payer does not restore its signer flag.
-    instructions[1].accounts[0] = solana_instruction::AccountMeta::new(Pubkey::new_unique(), false);
+    instructions[1].accounts[0] =
+        solana_instruction::AccountMeta::new(Address::new_unique(), false);
     assert_error(
         &mut context,
         &instructions,

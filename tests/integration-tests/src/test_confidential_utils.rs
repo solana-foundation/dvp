@@ -1,8 +1,8 @@
 use dvp_swap_program_client::DvpSwapProgramError as Error;
 use solana_account::Account;
+use solana_address::Address;
 use solana_instruction::AccountMeta;
 use solana_program_pack::Pack;
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 use solana_zk_elgamal_proof_interface::state::ProofContextStateMeta;
 use solana_zk_sdk_pod::encryption::{
@@ -23,7 +23,7 @@ use crate::{
 
 // Nonzero high and low limbs catch accidental swaps or truncation.
 const AMOUNT: u64 = (3 << LO_BITS) + 42;
-const PUBKEY_LEN: usize = core::mem::size_of::<Pubkey>();
+const PUBKEY_LEN: usize = core::mem::size_of::<Address>();
 const CONTEXT_HEADER_LEN: usize = core::mem::size_of::<ProofContextStateMeta>();
 const AE_CIPHERTEXT_LEN: usize = core::mem::size_of::<PodAeCiphertext>();
 const ELGAMAL_CIPHERTEXT_LEN: usize = core::mem::size_of::<PodElGamalCiphertext>();
@@ -31,7 +31,7 @@ const ELGAMAL_CIPHERTEXT_LEN: usize = core::mem::size_of::<PodElGamalCiphertext>
 fn snapshot(
     ct_context: &ConfidentialTransferTestContext,
     payment: &Payment,
-) -> Vec<(Pubkey, Option<Account>)> {
+) -> Vec<(Address, Option<Account>)> {
     [
         ct_context.escrow,
         ct_context.destination,
@@ -45,7 +45,7 @@ fn snapshot(
 
 fn assert_unchanged(
     ct_context: &ConfidentialTransferTestContext,
-    before: &[(Pubkey, Option<Account>)],
+    before: &[(Address, Option<Account>)],
 ) {
     for (address, account) in before {
         assert_eq!(
@@ -218,7 +218,7 @@ fn test_confidential_rejects_invalid_contexts_before_any_cpi() {
         wrong_type.data[PUBKEY_LEN] = u8::MAX;
         variants.push((wrong_type, Error::InvalidProofContext));
         let mut wrong_authority = original.clone();
-        wrong_authority.data[..PUBKEY_LEN].copy_from_slice(Pubkey::new_unique().as_ref());
+        wrong_authority.data[..PUBKEY_LEN].copy_from_slice(Address::new_unique().as_ref());
         variants.push((wrong_authority, Error::ProofContextAuthorityMismatch));
         for (account, expected) in variants {
             ct_context
@@ -472,7 +472,7 @@ fn test_confidential_transfer_memo_and_hook() {
 fn test_confidential_hook_extras_cannot_receive_outer_signer() {
     let mut ct_context = ConfidentialTransferTestContext::new(AMOUNT, true);
     let victim = ct_context.proof_authority.pubkey();
-    let attacker = Pubkey::new_unique();
+    let attacker = Address::new_unique();
     ct_context
         .context
         .svm

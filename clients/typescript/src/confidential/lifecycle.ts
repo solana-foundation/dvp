@@ -372,9 +372,7 @@ export type RefundInstruction =
       input: Omit<RecoverConfidentialDvpInput, RefundProofFields>;
     };
 export type RefundAmount =
-  | { kind: "none" }
-  | { kind: "full" }
-  | { kind: "partial"; amount: bigint };
+  { kind: "none" } | { kind: "full" } | { kind: "partial"; amount: bigint };
 export type RefundRequest = Readonly<{
   source: TransferSource;
   /** Fetched refund destination token account. */

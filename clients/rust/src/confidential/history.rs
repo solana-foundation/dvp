@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use bytemuck::Pod;
+use solana_address::Address;
 use solana_instruction::Instruction;
-use solana_pubkey::Pubkey;
 use solana_zk_elgamal_proof_interface::{
     instruction::ProofInstruction, proof_data::BatchedGroupedCiphertext3HandlesValidityProofContext,
 };
@@ -146,15 +146,15 @@ impl ExecutedTransaction {
 /// Extracts escrow balance operations from Token-2022 instructions and CPIs.
 /// Retains verified contexts and SPL Record writes until their accounts close.
 pub struct BalanceHistory {
-    escrow: Pubkey,
-    contexts: BTreeMap<Pubkey, Option<BatchedGroupedCiphertext3HandlesValidityProofContext>>,
-    closed_records: BTreeSet<Pubkey>,
-    records: BTreeMap<Pubkey, Vec<u8>>,
+    escrow: Address,
+    contexts: BTreeMap<Address, Option<BatchedGroupedCiphertext3HandlesValidityProofContext>>,
+    closed_records: BTreeSet<Address>,
+    records: BTreeMap<Address, Vec<u8>>,
     events: Vec<BalanceEvent>,
 }
 
 impl BalanceHistory {
-    pub fn new(escrow: Pubkey) -> Self {
+    pub fn new(escrow: Address) -> Self {
         Self {
             escrow,
             contexts: BTreeMap::new(),
@@ -483,7 +483,7 @@ impl BalanceHistory {
     }
 }
 
-fn account(ix: &Instruction, index: usize) -> Result<Pubkey, ConfidentialError> {
+fn account(ix: &Instruction, index: usize) -> Result<Address, ConfidentialError> {
     ix.accounts
         .get(index)
         .map(|v| v.pubkey)

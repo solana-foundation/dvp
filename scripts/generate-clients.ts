@@ -2,7 +2,6 @@ import fs from "fs";
 import path from "path";
 import { preserveConfigFiles } from "./lib/utils";
 import { createDvpSwapCodamaBuilder } from "./lib/dvp-swap-codama-builder";
-import { patchRustCpiAccountFlags } from "./lib/patch-rust-cpi-account-flags";
 import { patchTypeScriptSafeNumbers } from "./lib/patch-typescript-safe-numbers";
 import {
   patchRustSwapDvpExactSize,
@@ -35,16 +34,11 @@ const configPreserver = preserveConfigFiles(
 );
 
 dvpSwapCodama.accept(
-  renderRustVisitor(path.join(rustClientsDir, "src", "generated"), {
+  renderRustVisitor(rustClientsDir, {
     formatCode: true,
-    crateFolder: rustClientsDir,
     deleteFolderBeforeRendering: true,
   }),
 );
-
-// Correct the swapped CPI remaining-account flags emitted by
-// @codama/renderers-rust (see patch-rust-cpi-account-flags.ts).
-patchRustCpiAccountFlags(rustClientsDir);
 
 // Reject confidential and other non-458-byte accounts in the generated
 // SwapDvp readers (see patch-swap-dvp-exact-size.ts).

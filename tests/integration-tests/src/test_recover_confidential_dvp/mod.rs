@@ -11,8 +11,8 @@ use crate::{
     },
 };
 use dvp_swap_program_client::DvpSwapProgramError as Error;
+use solana_address::Address;
 use solana_instruction::{error::InstructionError, AccountMeta};
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 use spl_token_2022_interface::instruction as token_ix;
 
@@ -250,7 +250,7 @@ fn recover_authenticates_closed_swap_seed_parties_tombstone_and_ct_escrow() {
         (8, InstructionError::IncorrectProgramId),
     ] {
         let mut bad = ix.clone();
-        bad.accounts[position].pubkey = Pubkey::new_unique();
+        bad.accounts[position].pubkey = Address::new_unique();
         assert_failure(&mut context, bad, &f.user_b, expected, true);
     }
     // Alter each seed independently; a real tombstone must authenticate all of them.
@@ -289,7 +289,7 @@ fn recover_authenticates_closed_swap_seed_parties_tombstone_and_ct_escrow() {
     // An otherwise valid ordinary Token-2022 ATA cannot enter the CT recovery path.
     let ordinary = create_ata(
         &mut context,
-        &Pubkey::new_unique(),
+        &Address::new_unique(),
         &f.accounts.mint_b,
         &TOKEN,
     );

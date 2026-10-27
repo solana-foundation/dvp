@@ -12,9 +12,9 @@ use crate::{
 };
 use dvp_swap_program_client::{verify::SWAP_DVP_ACCOUNT_LEN, DvpSwapProgramError as Error};
 use solana_account::Account;
+use solana_address::Address;
 use solana_instruction::error::InstructionError;
 use solana_keypair::Keypair;
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 
 #[test]
@@ -77,10 +77,10 @@ fn apply_checks_signer_seeds_ata_program_and_tombstone() {
             f.close_fixture(&mut context);
         }
         for (index, address, expected) in [
-            (1, Pubkey::new_unique(), InstructionError::InvalidSeeds),
+            (1, Address::new_unique(), InstructionError::InvalidSeeds),
             (
                 2,
-                Pubkey::new_unique(),
+                Address::new_unique(),
                 InstructionError::InvalidAccountData,
             ),
             (3, f.accounts.dvp_ata_a, InstructionError::InvalidSeeds),

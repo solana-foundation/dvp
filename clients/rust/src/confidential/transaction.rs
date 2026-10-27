@@ -1,12 +1,12 @@
 use super::ConfidentialError;
 use bytemuck::Pod;
+use solana_address::Address;
 use solana_compute_budget_interface::ComputeBudgetInstruction;
 use solana_hash::Hash;
 use solana_instruction::{AccountMeta, Instruction};
 use solana_keypair::Keypair;
 use solana_message::{v0, v1, AddressLookupTableAccount, VersionedMessage};
 use solana_packet::PACKET_DATA_SIZE;
-use solana_pubkey::Pubkey;
 use solana_rent::Rent;
 use solana_signature::Signature;
 use solana_signer::Signer;
@@ -18,7 +18,7 @@ use solana_zk_elgamal_proof_interface::{
 };
 use spl_record::instruction::RecordInstruction;
 
-pub const RECORD_PROGRAM_ID: Pubkey = Pubkey::new_from_array(spl_record::ID.to_bytes());
+pub const RECORD_PROGRAM_ID: Address = Address::new_from_array(spl_record::ID.to_bytes());
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TransactionFormat {
@@ -28,7 +28,7 @@ pub enum TransactionFormat {
 
 /// Supply current RPC rent and already active lookup tables. V1 ignores LUTs.
 pub struct SessionConfig {
-    pub payer: Pubkey,
+    pub payer: Address,
     pub format: TransactionFormat,
     pub lookup_tables: Vec<AddressLookupTableAccount>,
     pub rent: Rent,
@@ -39,7 +39,7 @@ pub struct SessionConfig {
 }
 
 impl SessionConfig {
-    pub fn new(payer: Pubkey, format: TransactionFormat, rent: Rent) -> Self {
+    pub fn new(payer: Address, format: TransactionFormat, rent: Rent) -> Self {
         Self {
             payer,
             format,
@@ -199,13 +199,13 @@ pub struct TransactionSession {
 
 pub(crate) struct SessionBuilder<'a> {
     config: &'a SessionConfig,
-    authority: Pubkey,
+    authority: Address,
     preparation: Vec<PlannedTransaction>,
     cleanup: Vec<Instruction>,
 }
 
 impl<'a> SessionBuilder<'a> {
-    pub(crate) fn new(config: &'a SessionConfig, authority: Pubkey) -> Self {
+    pub(crate) fn new(config: &'a SessionConfig, authority: Address) -> Self {
         Self {
             config,
             authority,
@@ -271,7 +271,7 @@ impl<'a> SessionBuilder<'a> {
         &mut self,
         kind: ProofInstruction,
         proof: &T,
-    ) -> Result<Pubkey, ConfidentialError> {
+    ) -> Result<Address, ConfidentialError> {
         let context = Keypair::new();
         let address = context.pubkey();
         let space = core::mem::size_of::<ProofContextState<U>>();
@@ -382,8 +382,8 @@ impl<'a> SessionBuilder<'a> {
 }
 
 fn record_instruction(
-    record: Pubkey,
-    authority: Pubkey,
+    record: Address,
+    authority: Address,
     instruction: RecordInstruction<'_>,
 ) -> Instruction {
     let signer = !matches!(instruction, RecordInstruction::Initialize);
@@ -397,7 +397,7 @@ fn record_instruction(
     }
 }
 
-fn record_close(record: Pubkey, authority: Pubkey) -> Instruction {
+fn record_close(record: Address, authority: Address) -> Instruction {
     let mut ix = record_instruction(record, authority, RecordInstruction::CloseAccount);
     ix.accounts.push(AccountMeta::new(authority, false));
     ix

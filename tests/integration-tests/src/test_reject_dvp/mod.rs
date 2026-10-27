@@ -1,7 +1,7 @@
 use dvp_swap_program_client::instructions::{CreateDvpBuilder, RejectDvpBuilder};
+use solana_address::address;
+use solana_address::Address;
 use solana_keypair::Keypair;
-use solana_pubkey::pubkey;
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 use spl_token_2022_interface::instruction::transfer_checked;
 
@@ -197,7 +197,7 @@ fn test_reject_dvp_works_when_settlement_authority_is_unreachable() {
 
     // Clock sysvar — no private key, so nobody can sign Settle/Cancel
     // as this authority.
-    let unreachable_authority: Pubkey = pubkey!("SysvarC1ock11111111111111111111111111111111");
+    let unreachable_authority: Address = address!("SysvarC1ock11111111111111111111111111111111");
 
     let user_a = Keypair::new();
     let user_b = Keypair::new();

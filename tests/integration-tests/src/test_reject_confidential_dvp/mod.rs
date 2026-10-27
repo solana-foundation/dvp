@@ -11,8 +11,8 @@ use crate::{
     },
 };
 use dvp_swap_program_client::DvpSwapProgramError as Error;
+use solana_address::Address;
 use solana_instruction::{error::InstructionError, AccountMeta};
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 
 const AMOUNT_B: u64 = (3 << LO_BITS) + 42;
@@ -256,7 +256,7 @@ fn authorization_account_binding_and_hook_limits_match_terminal_contract() {
         (11, InstructionError::IncorrectProgramId),
     ] {
         let mut bad = ix.clone();
-        bad.accounts[position].pubkey = Pubkey::new_unique();
+        bad.accounts[position].pubkey = Address::new_unique();
         assert_failure(&mut context, bad, signer, expected, true);
     }
     let mut bad = ix.clone();

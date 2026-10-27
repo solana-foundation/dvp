@@ -1,0 +1,4 @@
+# zstd 0.13 via solana-rpc-client 4.2 (the Rust client's fetch feature); host-only, no fixed solana release yet.
+# crypto-bigint 0.5 via k256 in litesvm's solana-syscalls; test-only, the fix is a semver-major bump upstream.
+[advisories]
+ignore = ["RUSTSEC-2026-0391", "RUSTSEC-2026-0398", "RUSTSEC-2026-0403", "RUSTSEC-2026-0387"]

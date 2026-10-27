@@ -13,10 +13,10 @@ use dvp_swap_program_client::instructions::{
 use dvp_swap_program_client::types::{CtTransferData, LegBRefund};
 use litesvm::types::{FailedTransactionMetadata, TransactionMetadata};
 use solana_account::Account;
+use solana_address::{address, Address};
 use solana_instruction::{error::InstructionError, AccountMeta, Instruction};
 use solana_keypair::Keypair;
 use solana_message::{v1, VersionedMessage};
-use solana_pubkey::{pubkey, Pubkey};
 use solana_signer::Signer;
 use solana_transaction::{versioned::VersionedTransaction, TransactionError};
 use solana_zk_elgamal_proof_interface::{
@@ -62,7 +62,7 @@ use crate::{
     },
 };
 
-pub const FIXTURE: Pubkey = pubkey!("FCDHD6mkL4c7hMLxdLy2a9aCjraYJJwpF6gnbukwHRV5");
+pub const FIXTURE: Address = address!("FCDHD6mkL4c7hMLxdLy2a9aCjraYJJwpF6gnbukwHRV5");
 pub use solana_zk_elgamal_proof_interface::ID as ZK;
 pub const LO_BITS: usize = 16;
 pub const MAX_PENDING: u64 = 65_536;
@@ -71,10 +71,10 @@ pub const DECIMALS: u8 = 6;
 #[path = "../../transfer-hook-fixture/src/constants.rs"]
 mod hook_constants;
 
-const REJECT_CT_HOOK: Pubkey = Pubkey::new_from_array(hook_constants::REJECT_CT_PROGRAM_ID);
+const REJECT_CT_HOOK: Address = Address::new_from_array(hook_constants::REJECT_CT_PROGRAM_ID);
 
 /// Change a funded mint's hook using its real authority, with a matching EAML.
-pub fn switch_to_rejecting_hook(context: &mut TestContext, mint: &Pubkey) -> Vec<AccountMeta> {
+pub fn switch_to_rejecting_hook(context: &mut TestContext, mint: &Address) -> Vec<AccountMeta> {
     use spl_tlv_account_resolution::state::ExtraAccountMetaList;
     use spl_transfer_hook_interface::{
         get_extra_account_metas_address, instruction::ExecuteInstruction,
@@ -207,7 +207,7 @@ impl Keys {
     }
 }
 
-pub fn state(context: &TestContext, address: &Pubkey) -> ConfidentialTransferAccount {
+pub fn state(context: &TestContext, address: &Address) -> ConfidentialTransferAccount {
     let account = context.get_account(address).unwrap();
     *StateWithExtensions::<TokenAccount>::unpack(&account.data)
         .unwrap()
@@ -215,7 +215,7 @@ pub fn state(context: &TestContext, address: &Pubkey) -> ConfidentialTransferAcc
         .unwrap()
 }
 
-pub fn pending(context: &TestContext, address: &Pubkey, keys: &Keys) -> u64 {
+pub fn pending(context: &TestContext, address: &Address, keys: &Keys) -> u64 {
     let state = state(context, address);
     let lo: ElGamalCiphertext = state.pending_balance_lo.try_into().unwrap();
     let hi: ElGamalCiphertext = state.pending_balance_hi.try_into().unwrap();
@@ -225,10 +225,10 @@ pub fn pending(context: &TestContext, address: &Pubkey, keys: &Keys) -> u64 {
 
 pub fn context_account<T: bytemuck::Pod + ZkProofData<U>, U: bytemuck::Pod>(
     context: &mut TestContext,
-    authority: &Pubkey,
+    authority: &Address,
     instruction: ProofInstruction,
     proof: &T,
-) -> Pubkey {
+) -> Address {
     let keypair = Keypair::new();
     let space = size_of::<ProofContextState<U>>();
     let instructions = [
@@ -253,9 +253,9 @@ pub fn context_account<T: bytemuck::Pod + ZkProofData<U>, U: bytemuck::Pod>(
 
 pub fn transfer_contexts(
     context: &mut TestContext,
-    authority: &Pubkey,
+    authority: &Address,
     proof: &TransferProofData,
-) -> [Pubkey; 3] {
+) -> [Address; 3] {
     [
         context_account(
             context,
@@ -283,9 +283,9 @@ pub fn transfer_contexts(
 pub fn create_wallet_account(
     context: &mut TestContext,
     wallet: &Keypair,
-    mint: &Pubkey,
+    mint: &Address,
     keys: &Keys,
-) -> Pubkey {
+) -> Address {
     let address = create_ata(context, &wallet.pubkey(), mint, &TOKEN);
     let proof = build_pubkey_validity_proof_data(&keys.elgamal).unwrap();
     let mut instructions = vec![token_ix::reallocate(
@@ -317,16 +317,16 @@ pub fn create_wallet_account(
 /// A funded escrow owned by the CPI test program, ready for proof/helper tests.
 pub struct ConfidentialTransferTestContext {
     pub context: TestContext,
-    pub mint: Pubkey,
-    pub authority: Pubkey,
-    pub escrow: Pubkey,
+    pub mint: Address,
+    pub authority: Address,
+    pub escrow: Address,
     pub escrow_keys: Keys,
     pub recipient: Keypair,
-    pub destination: Pubkey,
+    pub destination: Address,
     pub recipient_keys: Keys,
     pub proof_authority: Keypair,
     source_owner: Keypair,
-    source: Pubkey,
+    source: Address,
     source_keys: Keys,
     pub extras: Vec<AccountMeta>,
 }
@@ -348,7 +348,7 @@ impl ConfidentialTransferTestContext {
         let recipient = Keypair::new();
         let recipient_keys = Keys::new();
         let destination = create_wallet_account(&mut context, &recipient, &mint, &recipient_keys);
-        let authority = Pubkey::find_program_address(&[b"ct-test"], &FIXTURE).0;
+        let authority = Address::find_program_address(&[b"ct-test"], &FIXTURE).0;
         let escrow = create_ata(&mut context, &authority, &mint, &TOKEN);
         let escrow_keys = Keys::new();
         let proof = build_pubkey_validity_proof_data(&escrow_keys.elgamal).unwrap();
@@ -562,7 +562,7 @@ impl ConfidentialTransferTestContext {
 
 pub struct Payment {
     pub instruction: Instruction,
-    pub contexts: [Pubkey; 6],
+    pub contexts: [Address; 6],
 }
 
 /// Inputs for the real DvP program; the swap and escrows are created explicitly.
@@ -581,7 +581,7 @@ impl ConfidentialDvpFixture {
         let user_a = Keypair::new();
         let user_b = Keypair::new();
         let authority = Keypair::new();
-        let mint_a = Pubkey::new_unique();
+        let mint_a = Address::new_unique();
         set_mint(context, &mint_a, &TOKEN_PROGRAM_ID);
         let mint_b = create_confidential_mint(context, auto_approve, hook);
         let nonce = 42;
@@ -652,7 +652,7 @@ impl ConfidentialDvpFixture {
         ]
     }
 
-    pub fn apply(&self, signer: Pubkey, amount: u64) -> ApplyConfidentialDvpBuilder {
+    pub fn apply(&self, signer: Address, amount: u64) -> ApplyConfidentialDvpBuilder {
         let mut builder = ApplyConfidentialDvpBuilder::new();
         builder
             .signer(signer)
@@ -705,7 +705,7 @@ pub fn create_confidential_mint(
     context: &mut TestContext,
     auto_approve: bool,
     hook: bool,
-) -> Pubkey {
+) -> Address {
     let mint = Keypair::new();
     let mut extensions = vec![ExtensionType::ConfidentialTransferMint];
     if hook {
@@ -759,11 +759,11 @@ pub fn create_confidential_mint(
 #[allow(clippy::too_many_arguments)]
 pub fn prepare_funding_transfer(
     context: &mut TestContext,
-    mint: &Pubkey,
+    mint: &Address,
     source_owner: &Keypair,
-    source_address: &Pubkey,
+    source_address: &Address,
     source_keys: &Keys,
-    destination: &Pubkey,
+    destination: &Address,
     destination_keys: &Keys,
     amount: u64,
     extras: &[AccountMeta],
@@ -949,7 +949,7 @@ pub fn mint_public(context: &mut TestContext, f: &ConfidentialDvpFixture, amount
 
 pub struct Refund {
     pub mode: LegBRefund,
-    pub contexts: [Option<Pubkey>; 4],
+    pub contexts: [Option<Address>; 4],
 }
 impl Refund {
     pub fn none() -> Self {
@@ -964,7 +964,7 @@ pub fn prepare_refund(
     context: &mut TestContext,
     f: &ConfidentialDvpFixture,
     keys: &Keys,
-    signer: Pubkey,
+    signer: Address,
     balance: u64,
     amount: u64,
     full: bool,
@@ -1027,7 +1027,7 @@ pub fn prepare_refund(
 
 pub fn terminal(
     f: &ConfidentialDvpFixture,
-    signer: Pubkey,
+    signer: Address,
     refund: &Refund,
     cancel: bool,
     extras: &[AccountMeta],
@@ -1220,7 +1220,7 @@ pub fn available(context: &TestContext, f: &ConfidentialDvpFixture) -> u64 {
 
 pub fn mutate_ct(
     context: &mut TestContext,
-    address: Pubkey,
+    address: Address,
     change: impl FnOnce(&mut ConfidentialTransferAccount),
 ) {
     let mut account = context.get_account(&address).unwrap();
@@ -1268,7 +1268,7 @@ pub fn setup_large_refund(
     (f, keys, credit * 2)
 }
 
-pub fn mint_auditor(context: &TestContext, mint: &Pubkey) -> Option<ElGamalPubkey> {
+pub fn mint_auditor(context: &TestContext, mint: &Address) -> Option<ElGamalPubkey> {
     let account = context.get_account(mint).unwrap();
     let mint = StateWithExtensions::<Mint>::unpack(&account.data).unwrap();
     Option::from(
@@ -1279,7 +1279,7 @@ pub fn mint_auditor(context: &TestContext, mint: &Pubkey) -> Option<ElGamalPubke
     .map(|key: solana_zk_sdk_pod::encryption::elgamal::PodElGamalPubkey| key.try_into().unwrap())
 }
 
-pub fn set_mint_auditor(context: &mut TestContext, mint: &Pubkey, auditor: &ElGamalPubkey) {
+pub fn set_mint_auditor(context: &mut TestContext, mint: &Address, auditor: &ElGamalPubkey) {
     let account = context.get_account(mint).unwrap();
     let mint_state = StateWithExtensions::<Mint>::unpack(&account.data).unwrap();
     let auto_approve = mint_state

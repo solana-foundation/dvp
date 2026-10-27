@@ -4,8 +4,8 @@ use crate::{
     types::{CtTransferData, LegBRefund},
     verify::ConfidentialSwapDvp,
 };
+use solana_address::Address;
 use solana_instruction::{AccountMeta, Instruction};
-use solana_pubkey::Pubkey;
 use solana_zk_elgamal_proof_interface::{instruction::ProofInstruction, proof_data::ZkProofData};
 use solana_zk_sdk::{
     encryption::elgamal::{ElGamalCiphertext, ElGamalPubkey},
@@ -33,8 +33,8 @@ const PAYMENT_AND_SURPLUS_CREDITS: u64 = SINGLE_TRANSFER_CREDITS + SINGLE_TRANSF
 /// destination, Token-2022 and the leg B mint before reading its ElGamal key.
 #[derive(Clone, Copy)]
 pub struct RecipientAccount<'a> {
-    pub address: Pubkey,
-    pub owner: Pubkey,
+    pub address: Address,
+    pub owner: Address,
     pub data: &'a [u8],
 }
 
@@ -42,8 +42,8 @@ pub struct RecipientAccount<'a> {
 /// reading its optional auditor key.
 #[derive(Clone, Copy)]
 pub struct MintAccount<'a> {
-    pub address: Pubkey,
-    pub owner: Pubkey,
+    pub address: Address,
+    pub owner: Address,
     pub data: &'a [u8],
 }
 
@@ -513,7 +513,7 @@ fn check_settle_accounts(
 
 fn read_auditor(
     mint: &MintAccount<'_>,
-    expected_mint: &Pubkey,
+    expected_mint: &Address,
     expected: Option<Option<&ElGamalPubkey>>,
 ) -> Result<Option<ElGamalPubkey>, ConfidentialError> {
     let auditor = mint_auditor(mint, expected_mint)?;
@@ -526,8 +526,8 @@ fn read_auditor(
 
 fn read_recipient(
     recipient: &RecipientAccount<'_>,
-    destination: &Pubkey,
-    mint: &Pubkey,
+    destination: &Address,
+    mint: &Address,
     expected_key: Option<&ElGamalPubkey>,
 ) -> Result<ConfidentialTransferAccount, ConfidentialError> {
     if recipient.address != *destination || recipient.owner != spl_token_2022_interface::ID {
@@ -570,7 +570,7 @@ fn check_recipient(
 
 struct PreparedTransfer {
     data: CtTransferData,
-    contexts: [Pubkey; 3],
+    contexts: [Address; 3],
     remaining: ElGamalCiphertext,
     limbs: [ElGamalCiphertext; 2],
 }
@@ -674,7 +674,7 @@ fn proof_error(error: impl std::fmt::Display) -> ConfidentialError {
 /// `expected_mint` owned by Token-2022.
 pub fn mint_auditor(
     mint: &MintAccount<'_>,
-    expected_mint: &Pubkey,
+    expected_mint: &Address,
 ) -> Result<Option<ElGamalPubkey>, ConfidentialError> {
     if mint.address != *expected_mint || mint.owner != spl_token_2022_interface::ID {
         return Err(ConfidentialError::Account("mint address or owner"));
@@ -695,15 +695,15 @@ pub fn mint_auditor(
 /// supplies an account-data fetch callback, so no RPC transport is imposed.
 #[allow(clippy::too_many_arguments)]
 pub async fn resolve_confidential_hook_accounts<F, Fut>(
-    hook_program: &Pubkey,
-    source: &Pubkey,
-    mint: &Pubkey,
-    destination: &Pubkey,
-    authority: &Pubkey,
+    hook_program: &Address,
+    source: &Address,
+    mint: &Address,
+    destination: &Address,
+    authority: &Address,
     fetch: F,
 ) -> Result<Vec<AccountMeta>, ConfidentialError>
 where
-    F: Fn(Pubkey) -> Fut,
+    F: Fn(Address) -> Fut,
     Fut: std::future::Future<Output = spl_transfer_hook_interface::offchain::AccountDataResult>,
 {
     let validation =
@@ -752,10 +752,10 @@ where
 pub(super) mod test_support {
     use super::*;
     pub struct TransferAccounts {
-        pub authority: Pubkey,
-        pub source: Pubkey,
-        pub mint: Pubkey,
-        pub destination: Pubkey,
+        pub authority: Address,
+        pub source: Address,
+        pub mint: Address,
+        pub destination: Address,
     }
 
     pub struct TransferRequest<'a> {

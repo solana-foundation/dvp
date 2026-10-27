@@ -34,18 +34,18 @@ is not the agreed payment. Use the checked client readers to distinguish modes.
 ```rust
 SwapDvp {
     bump: u8,
-    user_a: Pubkey,                              // seller
-    user_b: Pubkey,                              // buyer
-    mint_a: Pubkey,                              // asset
-    mint_b: Pubkey,                              // cash
-    settlement_authority: Pubkey,
+    user_a: Address,                              // seller
+    user_b: Address,                              // buyer
+    mint_a: Address,                              // asset
+    mint_b: Address,                              // cash
+    settlement_authority: Address,
     amount_a: u64,
     amount_b: u64,
     expiry_timestamp: i64,                       // settlement rejected after this
     nonce: u64,                                  // disambiguates DvPs sharing other seeds
     ref_string: [u8; 64],                        // opaque client reference, UTF-8 zero-padded
-    user_a_settlement_destination: Pubkey,       // receives the cash leg at Settle (defaults to user_a)
-    user_b_settlement_destination: Pubkey,       // receives the asset leg at Settle (defaults to user_b)
+    user_a_settlement_destination: Address,       // receives the cash leg at Settle (defaults to user_a)
+    user_b_settlement_destination: Address,       // receives the asset leg at Settle (defaults to user_b)
     earliest_settlement_timestamp: Option<i64>,  // optional lower bound on settlement
 }
 ```
@@ -91,15 +91,15 @@ PDA seeds: `[b"dvp", settlement_authority, user_a, user_b, mint_a, mint_b, nonce
 
 ### Confidential instructions
 
-| # | Name | Signer | Effect |
-| --- | --- | --- | --- |
-| 6 | CreateConfidentialDvp | payer | Creates the swap and configures escrow B for CT. |
-| 7 | ReclaimConfidentialDvp | `user_a` or `user_b` | Reclaims the signer's leg, keeping the swap open. |
-| 8 | SettleConfidentialDvp | `settlement_authority` | Pays the bound amount, refunds available surplus and closes eligible accounts. |
-| 9 | CancelConfidentialDvp | `settlement_authority` | Refunds the selected available B amount and public A, then closes the swap. |
-| 10 | RejectConfidentialDvp | `user_a` or `user_b` | Same refund path as Cancel, authorized by a party. |
-| 11 | RecoverConfidentialDvp | `user_b` | Recovers leg B after close; leg A uses `RecoverDvp`. |
-| 12 | ApplyConfidentialDvp | `user_a`, `user_b` or `settlement_authority` | Applies pending B credits before or after close. |
+| #   | Name                   | Signer                                       | Effect                                                                         |
+| --- | ---------------------- | -------------------------------------------- | ------------------------------------------------------------------------------ |
+| 6   | CreateConfidentialDvp  | payer                                        | Creates the swap and configures escrow B for CT.                               |
+| 7   | ReclaimConfidentialDvp | `user_a` or `user_b`                         | Reclaims the signer's leg, keeping the swap open.                              |
+| 8   | SettleConfidentialDvp  | `settlement_authority`                       | Pays the bound amount, refunds available surplus and closes eligible accounts. |
+| 9   | CancelConfidentialDvp  | `settlement_authority`                       | Refunds the selected available B amount and public A, then closes the swap.    |
+| 10  | RejectConfidentialDvp  | `user_a` or `user_b`                         | Same refund path as Cancel, authorized by a party.                             |
+| 11  | RecoverConfidentialDvp | `user_b`                                     | Recovers leg B after close; leg A uses `RecoverDvp`.                           |
+| 12  | ApplyConfidentialDvp   | `user_a`, `user_b` or `settlement_authority` | Applies pending B credits before or after close.                               |
 
 Funding remains an ordinary wallet token transfer. Confidential funding requires
 verified swap terms, a configured recipient escrow, and the shared seed.
@@ -142,62 +142,62 @@ refund modes, mint restrictions and transfer-hook limitations.
 
 ## Errors
 
-| Code | Variant                          | When                                                                                                                            |
-| ---- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `SignerNotParty`                 | Reclaim/Reject/Recover signer is not `user_a` or `user_b`                                                                       |
-| 1    | `DvpExpired`                     | Settle after `expiry_timestamp`                                                                                                 |
-| 2    | `SettlementAuthorityMismatch`    | Settle/Cancel signer is not `settlement_authority`                                                                              |
-| 3    | `SettlementTooEarly`             | Settle when `now < earliest_settlement_timestamp`                                                                               |
-| 4    | `LegNotFunded`                   | Settle when an escrow holds less than its target amount                                                                         |
-| 5    | `ExpiryNotInFuture`              | Create with `expiry_timestamp <= now`                                                                                           |
-| 6    | `EarliestAfterExpiry`            | Create with `earliest > expiry`                                                                                                 |
-| 7    | `SelfDvp`                        | Create with `user_a == user_b`                                                                                                  |
-| 8    | `SameMint`                       | Create with `mint_a == mint_b`                                                                                                  |
-| 9    | `ZeroAmount`                     | Create with `amount_a == 0`, or public Create with `amount_b == 0`                                                              |
+| Code | Variant                          | When                                                                                                                                                                                         |
+| ---- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `SignerNotParty`                 | Reclaim/Reject/Recover signer is not `user_a` or `user_b`                                                                                                                                    |
+| 1    | `DvpExpired`                     | Settle after `expiry_timestamp`                                                                                                                                                              |
+| 2    | `SettlementAuthorityMismatch`    | Settle/Cancel signer is not `settlement_authority`                                                                                                                                           |
+| 3    | `SettlementTooEarly`             | Settle when `now < earliest_settlement_timestamp`                                                                                                                                            |
+| 4    | `LegNotFunded`                   | Settle when an escrow holds less than its target amount                                                                                                                                      |
+| 5    | `ExpiryNotInFuture`              | Create with `expiry_timestamp <= now`                                                                                                                                                        |
+| 6    | `EarliestAfterExpiry`            | Create with `earliest > expiry`                                                                                                                                                              |
+| 7    | `SelfDvp`                        | Create with `user_a == user_b`                                                                                                                                                               |
+| 8    | `SameMint`                       | Create with `mint_a == mint_b`                                                                                                                                                               |
+| 9    | `ZeroAmount`                     | Create with `amount_a == 0`, or public Create with `amount_b == 0`                                                                                                                           |
 | 10   | `BlockedMintExtension`           | Create or Settle with `NonTransferable` or an active non-zero transfer-fee rate; Create also rejects a scheduled non-zero rate; confidential Create rejects any transfer-fee config on leg B |
-| 11   | `SettlementAuthorityIsParty`     | Create with `settlement_authority` equal to `user_a` or `user_b`                                                                |
-| 12   | `SettlementAuthorityExecutable`  | Create with an executable `settlement_authority` (can't be credited closed-account rent)                                        |
-| 13   | `NonceAlreadyUsed`               | Create reusing a `(seeds, nonce)` that already has a nonce tombstone (the address was used by a prior DvP)                      |
-| 14   | `ExpiryTooFarInFuture`           | Create with `expiry_timestamp` more than one year past creation time                                                            |
-| 15   | `RefStringTooLong`               | Create with a `ref_string` longer than 64 bytes                                                                                 |
-| 16   | `DvpStillOpen`                   | Recover while the SwapDvp is still program-owned (use Reclaim instead)                                                          |
-| 17   | `DvpNeverCreated`                | Recover with seed inputs that derive an address with no nonce tombstone                                                         |
-| 18   | `EscrowPreloadedWithLamports`    | Create when a non-native escrow ATA holds lamports above its rent-exempt minimum                                                |
-| 19   | `SettlementDestinationIsSwapDvp` | Create with a settlement destination equal to the `swap_dvp` PDA                                                                |
-| 20   | `SwapDvpPreloadedWithLamports`   | Create when the `swap_dvp` account holds lamports above its rent reserve                                                        |
-| 21   | `RecipientAtaMismatch`           | Settle/Cancel/Reject/Reclaim/Recover when a recipient or refund ATA's `owner`/`mint` no longer matches the expected wallet/mint |
-| 22   | `PartyNotSignerCapable`          | Create with `user_a` or `user_b` that is not a system-owned, non-executable account                                             |
-| 23   | `MintAuthorityChanged`           | Settle when a leg's mint authority no longer matches the value captured at Create                                               |
+| 11   | `SettlementAuthorityIsParty`     | Create with `settlement_authority` equal to `user_a` or `user_b`                                                                                                                             |
+| 12   | `SettlementAuthorityExecutable`  | Create with an executable `settlement_authority` (can't be credited closed-account rent)                                                                                                     |
+| 13   | `NonceAlreadyUsed`               | Create reusing a `(seeds, nonce)` that already has a nonce tombstone (the address was used by a prior DvP)                                                                                   |
+| 14   | `ExpiryTooFarInFuture`           | Create with `expiry_timestamp` more than one year past creation time                                                                                                                         |
+| 15   | `RefStringTooLong`               | Create with a `ref_string` longer than 64 bytes                                                                                                                                              |
+| 16   | `DvpStillOpen`                   | Recover while the SwapDvp is still program-owned (use Reclaim instead)                                                                                                                       |
+| 17   | `DvpNeverCreated`                | Recover with seed inputs that derive an address with no nonce tombstone                                                                                                                      |
+| 18   | `EscrowPreloadedWithLamports`    | Create when a non-native escrow ATA holds lamports above its rent-exempt minimum                                                                                                             |
+| 19   | `SettlementDestinationIsSwapDvp` | Create with a settlement destination equal to the `swap_dvp` PDA                                                                                                                             |
+| 20   | `SwapDvpPreloadedWithLamports`   | Create when the `swap_dvp` account holds lamports above its rent reserve                                                                                                                     |
+| 21   | `RecipientAtaMismatch`           | Settle/Cancel/Reject/Reclaim/Recover when a recipient or refund ATA's `owner`/`mint` no longer matches the expected wallet/mint                                                              |
+| 22   | `PartyNotSignerCapable`          | Create with `user_a` or `user_b` that is not a system-owned, non-executable account                                                                                                          |
+| 23   | `MintAuthorityChanged`           | Settle when a leg's mint authority no longer matches the value captured at Create                                                                                                            |
 
 Confidential mode adds the following codes; codes 0-23 retain their numbering.
 
-| Code | Variant | When |
-| --- | --- | --- |
-| 24 | `SwapModeMismatch` | Instruction and swap/escrow mode disagree |
-| 25 | `MintNotConfidential` | Leg B mint lacks CT support |
-| 26 | `EscrowPublicBalanceNotEmpty` | Public B balance exists at confidential Create |
-| 27 | `EscrowNotConfidential` | Required escrow CT state is absent |
-| 28 | `InvalidProofContext` | Wrong proof owner, length or type |
-| 29 | `ProofContextAuthorityMismatch` | Proof authority differs from the signer |
-| 30 | `ConfidentialAmountBMismatch` | Payment is not bound to the agreed ciphertexts |
-| 31 | `RecipientNotConfidential` | Recipient lacks CT state |
-| 32 | `RecipientNotApproved` | Recipient lacks CT approval |
-| 33 | `RecipientConfidentialCreditsDisabled` | Recipient rejects confidential credits |
-| 34 | `RecipientPendingCounterFull` | Recipient cannot accept another credit |
-| 35 | `EscrowBalanceNotZero` | Available balance does not match the zero proof |
-| 36 | `LegBRefundRequired` | `None` refund selected while available B is not all-zero bytes |
+| Code | Variant                                | When                                                           |
+| ---- | -------------------------------------- | -------------------------------------------------------------- |
+| 24   | `SwapModeMismatch`                     | Instruction and swap/escrow mode disagree                      |
+| 25   | `MintNotConfidential`                  | Leg B mint lacks CT support                                    |
+| 26   | `EscrowPublicBalanceNotEmpty`          | Public B balance exists at confidential Create                 |
+| 27   | `EscrowNotConfidential`                | Required escrow CT state is absent                             |
+| 28   | `InvalidProofContext`                  | Wrong proof owner, length or type                              |
+| 29   | `ProofContextAuthorityMismatch`        | Proof authority differs from the signer                        |
+| 30   | `ConfidentialAmountBMismatch`          | Payment is not bound to the agreed ciphertexts                 |
+| 31   | `RecipientNotConfidential`             | Recipient lacks CT state                                       |
+| 32   | `RecipientNotApproved`                 | Recipient lacks CT approval                                    |
+| 33   | `RecipientConfidentialCreditsDisabled` | Recipient rejects confidential credits                         |
+| 34   | `RecipientPendingCounterFull`          | Recipient cannot accept another credit                         |
+| 35   | `EscrowBalanceNotZero`                 | Available balance does not match the zero proof                |
+| 36   | `LegBRefundRequired`                   | `None` refund selected while available B is not all-zero bytes |
 
 ## Build & test
 
 ```sh
-make build              # generate clients + cargo-build-sbf
-make unit-test          # program and Rust client unit tests
-make integration-test   # build + Rust integration and all TypeScript client tests
-make fmt                # cargo fmt + clippy + pnpm format
-make verify-program-id  # pre-deploy: deploy keypair matches the declared program ID
+just build              # generate clients + cargo-build-sbf
+just unit-test          # program, Rust client and TypeScript unit tests
+just integration-test   # build + Rust integration and all TypeScript client tests
+just fmt                # cargo fmt + clippy + pnpm format
+just verify-program-id  # pre-deploy: deploy keypair matches the declared program ID
 ```
 
-Run `make fetch-test-fixtures` once before integration tests. External Token-2022
+Run `just fetch-test-fixtures` once before integration tests. External Token-2022
 and SPL Record binaries are pinned by SHA-256; see [test fixtures](tests/fixtures/README.md).
 Host tests use Rust 1.93.1 and LiteSVM 0.16 (Agave 4.2).
 

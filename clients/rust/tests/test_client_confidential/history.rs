@@ -7,10 +7,10 @@ use dvp_swap_program_client::confidential::test_utils::{
     RECORD_PROGRAM_ID,
 };
 use dvp_swap_program_client::confidential::*;
+use solana_address::Address;
 use solana_instruction::{AccountMeta, Instruction};
 use solana_keypair::Keypair;
 use solana_loader_v3_interface::{instruction as loader, state::UpgradeableLoaderState};
-use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 use solana_zk_elgamal_proof_interface::{
     instruction::{ContextStateInfo, ProofInstruction},
@@ -462,7 +462,7 @@ fn transfer_with_stored_proof(
 fn replay_external_proof(
     transactions: &[ExecutedTransaction],
     f: &ClientFixture,
-    proof_account: Pubkey,
+    proof_account: Address,
     bytes: &[u8],
 ) -> BalanceHistory {
     let mut replay = BalanceHistory::new(f.dvp.accounts.dvp_ata_b);
@@ -477,7 +477,7 @@ fn replay_external_proof(
     replay
 }
 
-fn record_instruction(record: Pubkey, payer: Pubkey, data: RecordInstruction<'_>) -> Instruction {
+fn record_instruction(record: Address, payer: Address, data: RecordInstruction<'_>) -> Instruction {
     let closing = matches!(data, RecordInstruction::CloseAccount);
     let mut accounts = vec![
         AccountMeta::new(record, false),
@@ -662,7 +662,7 @@ fn create_confidential_mint(
     context: &mut TestContext,
     config: &SessionConfig,
     supply: &Keys,
-) -> Pubkey {
+) -> Address {
     let mint = Keypair::new();
     let size = ExtensionType::try_calculate_account_len::<Mint>(&[
         ExtensionType::ConfidentialTransferMint,
@@ -701,7 +701,7 @@ fn proof_context<T: bytemuck::Pod + ZkProofData<U>, U: bytemuck::Pod>(
     kind: ProofInstruction,
     proof: &T,
     history: &mut Vec<ExecutedTransaction>,
-) -> Pubkey {
+) -> Address {
     let account = Keypair::new();
     let address = account.pubkey();
     let size = core::mem::size_of::<ProofContextState<U>>();

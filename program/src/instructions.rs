@@ -2,7 +2,7 @@ extern crate alloc;
 
 use alloc::string::String;
 use codama::CodamaInstructions;
-use pinocchio::Address as Pubkey;
+use pinocchio::Address;
 
 use crate::processor::shared::confidential::{CtTransferData, LegBRefund};
 
@@ -111,10 +111,10 @@ pub enum DvpSwapProgramInstruction {
         /// (`mint_b`) — at its canonical ATA (e.g. a custodian deposit
         /// wallet). Defaults to `user_a`. Settle-only: refunds always go
         /// to the depositor.
-        user_a_settlement_destination: Option<Pubkey>,
+        user_a_settlement_destination: Option<Address>,
         /// Wallet receiving user_b's settlement proceeds — the asset leg
         /// (`mint_a`). Defaults to `user_b`; same rules as above.
-        user_b_settlement_destination: Option<Pubkey>,
+        user_b_settlement_destination: Option<Address>,
         /// If set, settlement is also rejected before this timestamp.
         earliest_settlement_timestamp: Option<i64>,
     } = 0,
@@ -387,15 +387,15 @@ pub enum DvpSwapProgramInstruction {
     ))]
     RecoverDvp {
         /// Original `settlement_authority` seed input.
-        settlement_authority: Pubkey,
+        settlement_authority: Address,
         /// Original `user_a` seed input.
-        user_a: Pubkey,
+        user_a: Address,
         /// Original `user_b` seed input.
-        user_b: Pubkey,
+        user_b: Address,
         /// Original `mint_a` seed input.
-        mint_a: Pubkey,
+        mint_a: Address,
         /// Original `mint_b` seed input.
-        mint_b: Pubkey,
+        mint_b: Address,
         /// Original `nonce` seed input.
         nonce: u64,
     } = 5,
@@ -463,8 +463,8 @@ pub enum DvpSwapProgramInstruction {
         decryptable_zero_balance: [u8; 36],
         pubkey_validity_proof_offset: i8,
         ref_string: Option<String>,
-        user_a_settlement_destination: Option<Pubkey>,
-        user_b_settlement_destination: Option<Pubkey>,
+        user_a_settlement_destination: Option<Address>,
+        user_b_settlement_destination: Option<Address>,
         earliest_settlement_timestamp: Option<i64>,
     } = 6,
 
@@ -860,11 +860,11 @@ pub enum DvpSwapProgramInstruction {
         optional
     ))]
     RecoverConfidentialDvp {
-        settlement_authority: Pubkey,
-        user_a: Pubkey,
-        user_b: Pubkey,
-        mint_a: Pubkey,
-        mint_b: Pubkey,
+        settlement_authority: Address,
+        user_a: Address,
+        user_b: Address,
+        mint_a: Address,
+        mint_b: Address,
         nonce: u64,
         leg_b_refund: LegBRefund,
     } = 11,
@@ -895,11 +895,11 @@ pub enum DvpSwapProgramInstruction {
     ApplyConfidentialDvp {
         expected_pending_balance_credit_counter: u64,
         new_decryptable_available_balance: [u8; 36],
-        settlement_authority: Pubkey,
-        user_a: Pubkey,
-        user_b: Pubkey,
-        mint_a: Pubkey,
-        mint_b: Pubkey,
+        settlement_authority: Address,
+        user_a: Address,
+        user_b: Address,
+        mint_a: Address,
+        mint_b: Address,
         nonce: u64,
     } = 12,
 }

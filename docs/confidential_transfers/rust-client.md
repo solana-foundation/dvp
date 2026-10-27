@@ -78,11 +78,11 @@ most 64 unique addresses, including base and extra accounts. V1 ignores lookup
 tables; v0 uses `SessionConfig::lookup_tables`. Settle checks capacity for two
 incoming credits when payment and surplus use the same destination account.
 
-| Builder | Inputs and result |
-| --- | --- |
-| `create_session` | Generated Create accounts/terms, keys and agreed amount; inserts ciphertexts, decryptable zero and the inline pubkey proof. |
-| `apply_session` | Generated Apply accounts/seed terms and `TransferSource`; computes the actual pending counter and correct new AE balance. |
-| `settle_session` | Checked confidential swap, agreed amount, escrow and both recipient snapshots; prepares payment, amount-binding, optional surplus and zero proofs. |
+| Builder          | Inputs and result                                                                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create_session` | Generated Create accounts/terms, keys and agreed amount; inserts ciphertexts, decryptable zero and the inline pubkey proof.                                            |
+| `apply_session`  | Generated Apply accounts/seed terms and `TransferSource`; computes the actual pending counter and correct new AE balance.                                              |
+| `settle_session` | Checked confidential swap, agreed amount, escrow and both recipient snapshots; prepares payment, amount-binding, optional surplus and zero proofs.                     |
 | `refund_session` | `RefundInstruction` wrapping generated Reclaim/Cancel/Reject/Recover accounts and optional `RefundRequest`; prepares `Partial`/`Full` proofs or `None` without proofs. |
 
 Funding is an ordinary SPL Token-2022 wallet transfer to the verified escrow.
@@ -252,10 +252,10 @@ Build without test helpers:
 Client integration tests live in `clients/rust/tests` and reuse the framework's
 LiteSVM setup and pinned program fixtures. `tests/main.rs` is the explicit
 `integration` target (`autotests = false`); shared `tests/utils.rs` is not a
-separate test binary. After `make build` and
-`make fetch-test-fixtures`, run them with
+separate test binary. After `just build` and
+`just fetch-test-fixtures`, run them with
 `cargo test -p dvp-swap-program-client --all-features --test integration`.
-`make integration-test-no-build`, `make all-test` and the CI workspace test run
+`just integration-test-no-build`, `just all-test` and the CI workspace test run
 include them. Client unit tests can run separately with
 `cargo test -p dvp-swap-program-client --all-features --lib`.
 

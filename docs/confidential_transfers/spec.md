@@ -26,9 +26,9 @@ Preserved properties: atomic Settle; the Settle payment equals the agreed amount
 **Amount cap.** A CT transfer carries at most 48 bits, so `amount_b < 2^48` base units (section 4.3):
 
 | `mint_b` decimals | Max `amount_b` (2^48 − 1 base units) |
-| --- | --- |
-| 6 | 281,474,976.710655 tokens |
-| 9 | 281,474.976710655 tokens |
+| ----------------- | ------------------------------------ |
+| 6                 | 281,474,976.710655 tokens            |
+| 9                 | 281,474.976710655 tokens             |
 
 The cap applies to one transfer, not to escrow B's balance: a larger balance, for example after several credits, is refunded in several `Partial` steps (7.2).
 
@@ -173,12 +173,12 @@ Leg B's confidential funds cannot be recovered if no usable seed or escrow-key c
 
 The account has no discriminator; the program tells account kinds apart by owner and data length:
 
-| Data length | Meaning |
-| --- | --- |
-| 0 | Nonce tombstone (unchanged) |
-| 458 | `SwapDvp`, public mode. Byte-identical to the mainnet release |
-| 586 | `SwapDvp`, confidential amount B: the 458-byte base followed by a 128-byte tail |
-| anything else | `InvalidAccountData` |
+| Data length   | Meaning                                                                         |
+| ------------- | ------------------------------------------------------------------------------- |
+| 0             | Nonce tombstone (unchanged)                                                     |
+| 458           | `SwapDvp`, public mode. Byte-identical to the mainnet release                   |
+| 586           | `SwapDvp`, confidential amount B: the 458-byte base followed by a 128-byte tail |
+| anything else | `InvalidAccountData`                                                            |
 
 Base (offsets 0..458) is exactly today's layout, with `earliest_settlement_timestamp` at 449..458 as a fixed 9-byte slot. Tail, starting at 458:
 
@@ -202,14 +202,14 @@ Any other length fails with `InvalidAccountData` (table above).
 
 ### 5.2 Other accounts
 
-| Account | Owner | Public mode | Confidential mode | Existing mainnet accounts |
-| --- | --- | --- | --- | --- |
-| `SwapDvp` PDA | DvP | 458, unchanged | 586 (+128 bytes, ≈ +0.0009 SOL rent, returned at close) | Keep working, no migration |
-| Nonce tombstone PDA | DvP | 0, unchanged | 0, unchanged | Unchanged. Recover and Apply after close rely on it |
-| Escrow ATA leg A | Token / Token-2022 | Unchanged | Unchanged | Unchanged |
-| Escrow ATA leg B | Token-2022 | Unchanged | Base + `ConfidentialTransferAccount` (295 bytes + 4 TLV header), added by `Reallocate` at Create, payer funds; rent back to the closer | Unchanged. The extension is never added to the escrow of an existing public swap |
-| Proof context-state accounts | ZK ElGamal Proof program | n/a | Transient: created by the caller, closed inside the consuming instruction | n/a |
-| SPL Record staging accounts (legacy / v0 path only, section 12) | SPL Record | n/a | Transient, created and closed by the client in preparatory transactions | n/a |
+| Account                                                         | Owner                    | Public mode    | Confidential mode                                                                                                                      | Existing mainnet accounts                                                        |
+| --------------------------------------------------------------- | ------------------------ | -------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `SwapDvp` PDA                                                   | DvP                      | 458, unchanged | 586 (+128 bytes, ≈ +0.0009 SOL rent, returned at close)                                                                                | Keep working, no migration                                                       |
+| Nonce tombstone PDA                                             | DvP                      | 0, unchanged   | 0, unchanged                                                                                                                           | Unchanged. Recover and Apply after close rely on it                              |
+| Escrow ATA leg A                                                | Token / Token-2022       | Unchanged      | Unchanged                                                                                                                              | Unchanged                                                                        |
+| Escrow ATA leg B                                                | Token-2022               | Unchanged      | Base + `ConfidentialTransferAccount` (295 bytes + 4 TLV header), added by `Reallocate` at Create, payer funds; rent back to the closer | Unchanged. The extension is never added to the escrow of an existing public swap |
+| Proof context-state accounts                                    | ZK ElGamal Proof program | n/a            | Transient: created by the caller, closed inside the consuming instruction                                                              | n/a                                                                              |
+| SPL Record staging accounts (legacy / v0 path only, section 12) | SPL Record               | n/a            | Transient, created and closed by the client in preparatory transactions                                                                | n/a                                                                              |
 
 Mode of a closed swap (Recover, Apply): a leg B escrow that is a Token-2022 account carrying `ConfidentialTransferAccount` is confidential. Only the PDA can add that extension (Reallocate and ConfigureAccount need the owner's signature), and the ATA program never adds it, so an escrow recreated by a third party after close is always public and goes through `RecoverDvp`, as today.
 
@@ -217,13 +217,13 @@ Mode of a closed swap (Recover, Apply): a leg B escrow that is a Token-2022 acco
 
 Context-state account: owner = ZK ElGamal Proof program (`ZkE1Gama1Proof11111111111111111111111111111`), data = header (authority 32 ‖ proof_type 1) ‖ context.
 
-| Proof | proof_type | Context bytes | Layout |
-| --- | --- | --- | --- |
-| ZeroCiphertext | 1 | 96 | pubkey 32 ‖ ciphertext 64 |
-| CiphertextCiphertextEquality | 2 | 192 | first_pubkey 32 ‖ second_pubkey 32 ‖ first_ct 64 ‖ second_ct 64 |
-| CiphertextCommitmentEquality | 3 | 128 | body not read by DvP |
-| BatchedRangeProofU128 | 7 | 264 | body not read by DvP |
-| BatchedGroupedCiphertext3HandlesValidity | 12 | 352 | pk_source 32 ‖ pk_dest 32 ‖ pk_auditor 32 ‖ grouped_lo 128 ‖ grouped_hi 128 |
+| Proof                                    | proof_type | Context bytes | Layout                                                                      |
+| ---------------------------------------- | ---------- | ------------- | --------------------------------------------------------------------------- |
+| ZeroCiphertext                           | 1          | 96            | pubkey 32 ‖ ciphertext 64                                                   |
+| CiphertextCiphertextEquality             | 2          | 192           | first_pubkey 32 ‖ second_pubkey 32 ‖ first_ct 64 ‖ second_ct 64             |
+| CiphertextCommitmentEquality             | 3          | 128           | body not read by DvP                                                        |
+| BatchedRangeProofU128                    | 7          | 264           | body not read by DvP                                                        |
+| BatchedGroupedCiphertext3HandlesValidity | 12         | 352           | pk_source 32 ‖ pk_dest 32 ‖ pk_auditor 32 ‖ grouped_lo 128 ‖ grouped_hi 128 |
 
 Grouped ciphertext = commitment 32 ‖ handle_source 32 ‖ handle_dest 32 ‖ handle_auditor 32; its first 64 bytes are the ciphertext under the source key (what Token-2022 extracts as `try_extract_ciphertext(0)`).
 
@@ -255,21 +255,21 @@ Why it holds: the range proof inside the transfer forces `lo < 2^16`, `hi < 2^32
 
 ### 7.1 Instruction set
 
-| Disc. | Instruction | Mode |
-| --- | --- | --- |
-| 0 | CreateDvp | public, source baseline |
-| 1 | ReclaimDvp | public, source baseline |
-| 2 | SettleDvp | public, source baseline |
-| 3 | CancelDvp | public, source baseline |
-| 4 | RejectDvp | public, source baseline |
-| 5 | RecoverDvp | public, source baseline |
-| 6 | CreateConfidentialDvp | confidential |
-| 7 | ReclaimConfidentialDvp | confidential |
-| 8 | SettleConfidentialDvp | confidential |
-| 9 | CancelConfidentialDvp | confidential |
-| 10 | RejectConfidentialDvp | confidential |
-| 11 | RecoverConfidentialDvp | confidential |
-| 12 | ApplyConfidentialDvp | confidential, new operation |
+| Disc. | Instruction            | Mode                        |
+| ----- | ---------------------- | --------------------------- |
+| 0     | CreateDvp              | public, source baseline     |
+| 1     | ReclaimDvp             | public, source baseline     |
+| 2     | SettleDvp              | public, source baseline     |
+| 3     | CancelDvp              | public, source baseline     |
+| 4     | RejectDvp              | public, source baseline     |
+| 5     | RecoverDvp             | public, source baseline     |
+| 6     | CreateConfidentialDvp  | confidential                |
+| 7     | ReclaimConfidentialDvp | confidential                |
+| 8     | SettleConfidentialDvp  | confidential                |
+| 9     | CancelConfidentialDvp  | confidential                |
+| 10    | RejectConfidentialDvp  | confidential                |
+| 11    | RecoverConfidentialDvp | confidential                |
+| 12    | ApplyConfidentialDvp   | confidential, new operation |
 
 Confidential discriminators mirror the public ones at +6; Apply has no public counterpart.
 
@@ -305,11 +305,11 @@ enum LegBRefund {
 
 Tags 0 and 1 encode like `Option<CtTransferData>`. A CT transfer carries at most 2^48 − 1 (section 2), while escrow B can hold more after several credits; `Partial` refunds it in steps.
 
-| Mode | Transfer contexts | Zero context | Effect |
-| --- | --- | --- | --- |
-| `None` | placeholders | placeholder | no CT transfer; public balance withdrawal only in Reclaim/Recover (below) |
-| `Full` | real | real | the full available balance; zero check and reset of escrow B |
-| `Partial` | real | placeholder | part of the available balance; escrow B stays open |
+| Mode      | Transfer contexts | Zero context | Effect                                                                    |
+| --------- | ----------------- | ------------ | ------------------------------------------------------------------------- |
+| `None`    | placeholders      | placeholder  | no CT transfer; public balance withdrawal only in Reclaim/Recover (below) |
+| `Full`    | real              | real         | the full available balance; zero check and reset of escrow B              |
+| `Partial` | real              | placeholder  | part of the available balance; escrow B stays open                        |
 
 `Full` and `Partial`:
 
@@ -331,25 +331,25 @@ Discriminator 6. Creates a confidential swap and configures escrow B for CT.
 
 Data:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `amount_a` | `u64` | as CreateDvp |
-| `expiry_timestamp` | `i64` | as CreateDvp |
-| `nonce` | `u64` | as CreateDvp |
-| `amount_b_ciphertext_lo` | `[u8; 64]` | Enc(lo), section 4.3 |
-| `amount_b_ciphertext_hi` | `[u8; 64]` | Enc(hi) |
-| `decryptable_zero_balance` | `[u8; 36]` | `escrow_ae` encryption of 0 |
-| `pubkey_validity_proof_offset` | `i8` | non-zero, relative to this instruction |
-| `ref_string`, `user_a_settlement_destination`, `user_b_settlement_destination`, `earliest_settlement_timestamp` | options | as CreateDvp |
+| Field                                                                                                           | Type       | Notes                                  |
+| --------------------------------------------------------------------------------------------------------------- | ---------- | -------------------------------------- |
+| `amount_a`                                                                                                      | `u64`      | as CreateDvp                           |
+| `expiry_timestamp`                                                                                              | `i64`      | as CreateDvp                           |
+| `nonce`                                                                                                         | `u64`      | as CreateDvp                           |
+| `amount_b_ciphertext_lo`                                                                                        | `[u8; 64]` | Enc(lo), section 4.3                   |
+| `amount_b_ciphertext_hi`                                                                                        | `[u8; 64]` | Enc(hi)                                |
+| `decryptable_zero_balance`                                                                                      | `[u8; 36]` | `escrow_ae` encryption of 0            |
+| `pubkey_validity_proof_offset`                                                                                  | `i8`       | non-zero, relative to this instruction |
+| `ref_string`, `user_a_settlement_destination`, `user_b_settlement_destination`, `earliest_settlement_timestamp` | options    | as CreateDvp                           |
 
 There is no `amount_b` field.
 
 Accounts:
 
-| # | Account | Flags |
-| --- | --- | --- |
-| 0-13 | CreateDvp accounts | as CreateDvp |
-| 14 | `instructions_sysvar` | |
+| #    | Account               | Flags        |
+| ---- | --------------------- | ------------ |
+| 0-13 | CreateDvp accounts    | as CreateDvp |
+| 14   | `instructions_sysvar` |              |
 
 Steps, after all CreateDvp checks (`ZeroAmount` applies to `amount_a` only):
 
@@ -369,20 +369,20 @@ Discriminator 7. One party takes its own leg back; the swap stays open.
 
 Data:
 
-| Field | Type | Notes |
-| --- | --- | --- |
+| Field          | Type         | Notes                             |
+| -------------- | ------------ | --------------------------------- |
 | `leg_b_refund` | `LegBRefund` | `None`, `Full` or `Partial` (7.2) |
 
 Accounts:
 
-| # | Account | Flags |
-| --- | --- | --- |
-| 0-6 | ReclaimDvp accounts | as ReclaimDvp; 0 (signer) also writable, receives context rent |
-| 7 | `zk_elgamal_proof_program` | |
-| 8 | equality context (`CiphertextCommitmentEquality`) | writable, optional |
-| 9 | validity context (`BatchedGroupedCiphertext3HandlesValidity`) | writable, optional |
-| 10 | range context (`BatchedRangeProofU128`) | writable, optional |
-| 11 | zero context (`ZeroCiphertext`) | writable, optional |
+| #   | Account                                                       | Flags                                                          |
+| --- | ------------------------------------------------------------- | -------------------------------------------------------------- |
+| 0-6 | ReclaimDvp accounts                                           | as ReclaimDvp; 0 (signer) also writable, receives context rent |
+| 7   | `zk_elgamal_proof_program`                                    |                                                                |
+| 8   | equality context (`CiphertextCommitmentEquality`)             | writable, optional                                             |
+| 9   | validity context (`BatchedGroupedCiphertext3HandlesValidity`) | writable, optional                                             |
+| 10  | range context (`BatchedRangeProofU128`)                       | writable, optional                                             |
+| 11  | zero context (`ZeroCiphertext`)                               | writable, optional                                             |
 
 Hook extras follow.
 
@@ -397,27 +397,27 @@ Discriminator 8. Settles both legs atomically; the settlement authority signs.
 
 Data:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `leg_a_extras_count` | `u8` | hook extras for leg A, as in the public instruction |
-| `payment` | `CtTransferData` | payment transfer to `user_a_destination_ata_b` |
-| `surplus_b` | `Option<CtTransferData>` | surplus refund to `user_b_ata_b` |
+| Field                | Type                     | Notes                                               |
+| -------------------- | ------------------------ | --------------------------------------------------- |
+| `leg_a_extras_count` | `u8`                     | hook extras for leg A, as in the public instruction |
+| `payment`            | `CtTransferData`         | payment transfer to `user_a_destination_ata_b`      |
+| `surplus_b`          | `Option<CtTransferData>` | surplus refund to `user_b_ata_b`                    |
 
 Accounts:
 
-| # | Account | Flags |
-| --- | --- | --- |
-| 0-12 | SettleDvp accounts | as SettleDvp |
-| 13 | `zk_elgamal_proof_program` | |
-| 14 | payment equality context (`CiphertextCommitmentEquality`) | writable |
-| 15 | payment validity context (`BatchedGroupedCiphertext3HandlesValidity`) | writable |
-| 16 | payment range context (`BatchedRangeProofU128`) | writable |
-| 17 | `eq_lo` context (`CiphertextCiphertextEquality`) | writable |
-| 18 | `eq_hi` context (`CiphertextCiphertextEquality`) | writable |
-| 19 | zero context (`ZeroCiphertext`) | writable |
-| 20 | surplus equality context (`CiphertextCommitmentEquality`) | writable, optional, with `surplus_b` |
-| 21 | surplus validity context (`BatchedGroupedCiphertext3HandlesValidity`) | writable, optional, with `surplus_b` |
-| 22 | surplus range context (`BatchedRangeProofU128`) | writable, optional, with `surplus_b` |
+| #    | Account                                                               | Flags                                |
+| ---- | --------------------------------------------------------------------- | ------------------------------------ |
+| 0-12 | SettleDvp accounts                                                    | as SettleDvp                         |
+| 13   | `zk_elgamal_proof_program`                                            |                                      |
+| 14   | payment equality context (`CiphertextCommitmentEquality`)             | writable                             |
+| 15   | payment validity context (`BatchedGroupedCiphertext3HandlesValidity`) | writable                             |
+| 16   | payment range context (`BatchedRangeProofU128`)                       | writable                             |
+| 17   | `eq_lo` context (`CiphertextCiphertextEquality`)                      | writable                             |
+| 18   | `eq_hi` context (`CiphertextCiphertextEquality`)                      | writable                             |
+| 19   | zero context (`ZeroCiphertext`)                                       | writable                             |
+| 20   | surplus equality context (`CiphertextCommitmentEquality`)             | writable, optional, with `surplus_b` |
+| 21   | surplus validity context (`BatchedGroupedCiphertext3HandlesValidity`) | writable, optional, with `surplus_b` |
+| 22   | surplus range context (`BatchedRangeProofU128`)                       | writable, optional, with `surplus_b` |
 
 Hook extras follow, split by `leg_a_extras_count`.
 
@@ -444,21 +444,21 @@ Discriminators 9 (Cancel, settlement authority) and 10 (Reject, `user_a` or `use
 
 Data:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `leg_a_extras_count` | `u8` | hook extras for leg A, as in the public instruction |
-| `leg_b_refund` | `LegBRefund` | `None`, `Full` or `Partial` (7.2) |
+| Field                | Type         | Notes                                               |
+| -------------------- | ------------ | --------------------------------------------------- |
+| `leg_a_extras_count` | `u8`         | hook extras for leg A, as in the public instruction |
+| `leg_b_refund`       | `LegBRefund` | `None`, `Full` or `Partial` (7.2)                   |
 
 Accounts:
 
-| # | Account | Flags |
-| --- | --- | --- |
-| 0-10 | CancelDvp / RejectDvp accounts | as CancelDvp / RejectDvp |
-| 11 | `zk_elgamal_proof_program` | |
-| 12 | equality context (`CiphertextCommitmentEquality`) | writable, optional |
-| 13 | validity context (`BatchedGroupedCiphertext3HandlesValidity`) | writable, optional |
-| 14 | range context (`BatchedRangeProofU128`) | writable, optional |
-| 15 | zero context (`ZeroCiphertext`) | writable, optional |
+| #    | Account                                                       | Flags                    |
+| ---- | ------------------------------------------------------------- | ------------------------ |
+| 0-10 | CancelDvp / RejectDvp accounts                                | as CancelDvp / RejectDvp |
+| 11   | `zk_elgamal_proof_program`                                    |                          |
+| 12   | equality context (`CiphertextCommitmentEquality`)             | writable, optional       |
+| 13   | validity context (`BatchedGroupedCiphertext3HandlesValidity`) | writable, optional       |
+| 14   | range context (`BatchedRangeProofU128`)                       | writable, optional       |
+| 15   | zero context (`ZeroCiphertext`)                               | writable, optional       |
 
 Hook extras follow, split by `leg_a_extras_count`.
 
@@ -475,22 +475,22 @@ Discriminator 11. After close, `user_b` drains an escrow B that stayed open: a c
 
 Data:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `settlement_authority`, `user_a`, `user_b`, `mint_a`, `mint_b` | `Pubkey` each | seed inputs, re-derive the swap PDA |
-| `nonce` | `u64` | seed input |
-| `leg_b_refund` | `LegBRefund` | `None`, `Full` or `Partial` (7.2) |
+| Field                                                          | Type           | Notes                               |
+| -------------------------------------------------------------- | -------------- | ----------------------------------- |
+| `settlement_authority`, `user_a`, `user_b`, `mint_a`, `mint_b` | `Address` each | seed inputs, re-derive the swap PDA |
+| `nonce`                                                        | `u64`          | seed input                          |
+| `leg_b_refund`                                                 | `LegBRefund`   | `None`, `Full` or `Partial` (7.2)   |
 
 Accounts:
 
-| # | Account | Flags |
-| --- | --- | --- |
-| 0-7 | RecoverDvp accounts | as RecoverDvp |
-| 8 | `zk_elgamal_proof_program` | |
-| 9 | equality context (`CiphertextCommitmentEquality`) | writable, optional |
-| 10 | validity context (`BatchedGroupedCiphertext3HandlesValidity`) | writable, optional |
-| 11 | range context (`BatchedRangeProofU128`) | writable, optional |
-| 12 | zero context (`ZeroCiphertext`) | writable, optional |
+| #   | Account                                                       | Flags              |
+| --- | ------------------------------------------------------------- | ------------------ |
+| 0-7 | RecoverDvp accounts                                           | as RecoverDvp      |
+| 8   | `zk_elgamal_proof_program`                                    |                    |
+| 9   | equality context (`CiphertextCommitmentEquality`)             | writable, optional |
+| 10  | validity context (`BatchedGroupedCiphertext3HandlesValidity`) | writable, optional |
+| 11  | range context (`BatchedRangeProofU128`)                       | writable, optional |
+| 12  | zero context (`ZeroCiphertext`)                               | writable, optional |
 
 Hook extras follow.
 
@@ -507,22 +507,22 @@ Discriminator 12. Moves escrow B's pending balance into available, while the swa
 
 Data:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `expected_pending_balance_credit_counter` | `u64` | as Token-2022 `ApplyPendingBalance` |
-| `new_decryptable_available_balance` | `[u8; 36]` | new available balance under `escrow_ae` |
-| `settlement_authority`, `user_a`, `user_b`, `mint_a`, `mint_b` | `Pubkey` each | seed inputs, re-derive the swap PDA |
-| `nonce` | `u64` | seed input |
+| Field                                                          | Type           | Notes                                   |
+| -------------------------------------------------------------- | -------------- | --------------------------------------- |
+| `expected_pending_balance_credit_counter`                      | `u64`          | as Token-2022 `ApplyPendingBalance`     |
+| `new_decryptable_available_balance`                            | `[u8; 36]`     | new available balance under `escrow_ae` |
+| `settlement_authority`, `user_a`, `user_b`, `mint_a`, `mint_b` | `Address` each | seed inputs, re-derive the swap PDA     |
+| `nonce`                                                        | `u64`          | seed input                              |
 
 Accounts:
 
-| # | Account | Flags |
-| --- | --- | --- |
-| 0 | `signer` | signer |
-| 1 | `swap_dvp` | |
-| 2 | `nonce_tombstone` | |
-| 3 | `dvp_ata_b` (escrow B) | writable |
-| 4 | `token_program` (Token-2022) | |
+| #   | Account                      | Flags    |
+| --- | ---------------------------- | -------- |
+| 0   | `signer`                     | signer   |
+| 1   | `swap_dvp`                   |          |
+| 2   | `nonce_tombstone`            |          |
+| 3   | `dvp_ata_b` (escrow B)       | writable |
+| 4   | `token_program` (Token-2022) |          |
 
 Steps:
 
@@ -561,21 +561,21 @@ Hook programs that read or limit the amount see `u64::MAX` and may reject. The b
 
 Confidential error codes are 24-36, in the table order below. Codes 0-23 retain the source baseline ABI at `df9919e`; compare against the deployed mainnet release before upgrading.
 
-| Error | When |
-| --- | --- |
-| `SwapModeMismatch` | Public instruction on a confidential swap or CT escrow, or a confidential instruction on an open public swap |
-| `MintNotConfidential` | CreateConfidentialDvp / SettleConfidentialDvp: `mint_b` lacks `ConfidentialTransferMint` |
-| `EscrowPublicBalanceNotEmpty` | CreateConfidentialDvp: leg B escrow already holds a public balance |
-| `EscrowNotConfidential` | Apply, RecoverConfidentialDvp: escrow lacks the CT extension |
-| `InvalidProofContext` | Context owner, length or type wrong |
-| `ProofContextAuthorityMismatch` | Context authority is not the signer |
-| `ConfidentialAmountBMismatch` | SettleConfidentialDvp: amount binding fails |
-| `RecipientNotConfidential` | Recipient ATA lacks the CT extension |
-| `RecipientNotApproved` | Recipient ATA not approved |
-| `RecipientConfidentialCreditsDisabled` | Recipient does not accept confidential credits |
-| `RecipientPendingCounterFull` | Recipient pending counter at maximum |
-| `EscrowBalanceNotZero` | Settle and `Full` refunds: the zero context does not match the escrow's available balance after the transfers |
-| `LegBRefundRequired` | Leg B branch of Reclaim, Cancel, Reject, Recover: `leg_b_refund = None` while available is not all-zero bytes |
+| Error                                  | When                                                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `SwapModeMismatch`                     | Public instruction on a confidential swap or CT escrow, or a confidential instruction on an open public swap  |
+| `MintNotConfidential`                  | CreateConfidentialDvp / SettleConfidentialDvp: `mint_b` lacks `ConfidentialTransferMint`                      |
+| `EscrowPublicBalanceNotEmpty`          | CreateConfidentialDvp: leg B escrow already holds a public balance                                            |
+| `EscrowNotConfidential`                | Apply, RecoverConfidentialDvp: escrow lacks the CT extension                                                  |
+| `InvalidProofContext`                  | Context owner, length or type wrong                                                                           |
+| `ProofContextAuthorityMismatch`        | Context authority is not the signer                                                                           |
+| `ConfidentialAmountBMismatch`          | SettleConfidentialDvp: amount binding fails                                                                   |
+| `RecipientNotConfidential`             | Recipient ATA lacks the CT extension                                                                          |
+| `RecipientNotApproved`                 | Recipient ATA not approved                                                                                    |
+| `RecipientConfidentialCreditsDisabled` | Recipient does not accept confidential credits                                                                |
+| `RecipientPendingCounterFull`          | Recipient pending counter at maximum                                                                          |
+| `EscrowBalanceNotZero`                 | Settle and `Full` refunds: the zero context does not match the escrow's available balance after the transfers |
+| `LegBRefundRequired`                   | Leg B branch of Reclaim, Cancel, Reject, Recover: `leg_b_refund = None` while available is not all-zero bytes |
 
 ## 10. Security invariants
 
@@ -627,19 +627,19 @@ Settle and refunds of a funded leg B take several transactions: preparatory ones
 
 Measured Rust sessions in `test_client_confidential`, with a separate fee payer and the fixture's active lookup tables. Sizes include signatures; final sizes and packing depend on the supplied LUTs:
 
-| Flow | v1 | v0 + LUT |
-| --- | --- | --- |
-| Create | 1 tx, 972 bytes | 1 tx, 609 bytes |
-| Apply | 1 tx, 624 bytes | 1 tx, 572 bytes |
-| Settle, no surplus | 1 prep (4096 bytes) + final (1076 bytes) | 5 prep + final (779 bytes) |
-| Settle, with surplus | 2 prep + final (1336 bytes) | 9 prep + final (1039 bytes) |
-| Settle, hooked `mint_b`, surplus and required memos | 2 prep + final (1435 bytes) | not supported |
-| Reclaim, Partial | 1 prep + final (776 bytes) | 4 prep + final (665 bytes) |
-| Reclaim, Full | 1 prep + final (808 bytes) | 4 prep + final (697 bytes) |
-| Cancel/Reject, funded leg B | 1 prep + final (909-941 bytes) | 4 prep + final (674-706 bytes) |
-| Recover, Full | 1 prep + final (1009 bytes) | 4 prep + final (867 bytes) |
-| Recover, None public withdrawal | 1 tx, 717 bytes | 1 tx, 575 bytes |
-| Buyer's funding (a plain CT transfer) | 1 prep + transfer (702 bytes) | 4 prep + transfer (712 bytes) |
+| Flow                                                | v1                                       | v0 + LUT                       |
+| --------------------------------------------------- | ---------------------------------------- | ------------------------------ |
+| Create                                              | 1 tx, 972 bytes                          | 1 tx, 609 bytes                |
+| Apply                                               | 1 tx, 624 bytes                          | 1 tx, 572 bytes                |
+| Settle, no surplus                                  | 1 prep (4096 bytes) + final (1076 bytes) | 5 prep + final (779 bytes)     |
+| Settle, with surplus                                | 2 prep + final (1336 bytes)              | 9 prep + final (1039 bytes)    |
+| Settle, hooked `mint_b`, surplus and required memos | 2 prep + final (1435 bytes)              | not supported                  |
+| Reclaim, Partial                                    | 1 prep + final (776 bytes)               | 4 prep + final (665 bytes)     |
+| Reclaim, Full                                       | 1 prep + final (808 bytes)               | 4 prep + final (697 bytes)     |
+| Cancel/Reject, funded leg B                         | 1 prep + final (909-941 bytes)           | 4 prep + final (674-706 bytes) |
+| Recover, Full                                       | 1 prep + final (1009 bytes)              | 4 prep + final (867 bytes)     |
+| Recover, None public withdrawal                     | 1 tx, 717 bytes                          | 1 tx, 575 bytes                |
+| Buyer's funding (a plain CT transfer)               | 1 prep + transfer (702 bytes)            | 4 prep + transfer (712 bytes)  |
 
 - Final Settle used roughly 70-85k CU without surplus, 105-120k with surplus, and 152k with the test hook and required memos. Preparation stayed below 250k CU per transaction.
 - All six Settle contexts fit in one v1 preparation at exactly 4096 bytes. V0 Record writes reach 1232 bytes; the client checks every transaction against its format's limit.
@@ -652,13 +652,13 @@ Requirements:
 
 Rust and TypeScript client helpers:
 
-| Helper | What it does |
-| --- | --- |
-| Rust `derive_shared_seed(swap, mac)` / TS `deriveSharedSeed(swapDvp, mac)` | shared seed (4.1); takes an HMAC callback so the key stays in a KMS |
-| Rust `EscrowKeys::from_seed`, `encrypt_amount` / TS `EscrowKeys.fromSeed`, `encryptAmount` | escrow keys and amount ciphertexts from the seed (4.2, 4.3) |
-| Rust `verify::decode_swap_dvp_account` / TS `decodeSwapDvpChecked`, `verifySwapDvp` | check and decode 458 or 586 bytes into `SwapDvpAccount`; `base()` exposes common fields |
-| Rust `verify::verify_confidential_funding` / TS `verifyConfidentialFunding` | pre-funding checks using shared seed and expected amount B (4.4) |
-| Rust `read_escrow_balance`, `BalanceHistory` / TS `readEscrowBalance`, `BalanceHistory` | available and pending balance of escrow B; rebuilt from transaction history when the decryptable balance is wrong |
+| Helper                                                                                                                                            | What it does                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rust `derive_shared_seed(swap, mac)` / TS `deriveSharedSeed(swapDvp, mac)`                                                                        | shared seed (4.1); takes an HMAC callback so the key stays in a KMS                                                                                                                                                                                                                                                     |
+| Rust `EscrowKeys::from_seed`, `encrypt_amount` / TS `EscrowKeys.fromSeed`, `encryptAmount`                                                        | escrow keys and amount ciphertexts from the seed (4.2, 4.3)                                                                                                                                                                                                                                                             |
+| Rust `verify::decode_swap_dvp_account` / TS `decodeSwapDvpChecked`, `verifySwapDvp`                                                               | check and decode 458 or 586 bytes into `SwapDvpAccount`; `base()` exposes common fields                                                                                                                                                                                                                                 |
+| Rust `verify::verify_confidential_funding` / TS `verifyConfidentialFunding`                                                                       | pre-funding checks using shared seed and expected amount B (4.4)                                                                                                                                                                                                                                                        |
+| Rust `read_escrow_balance`, `BalanceHistory` / TS `readEscrowBalance`, `BalanceHistory`                                                           | available and pending balance of escrow B; rebuilt from transaction history when the decryptable balance is wrong                                                                                                                                                                                                       |
 | Rust `create_session`, `apply_session`, `settle_session`, `refund_session` / TS `createSession`, `applySession`, `settleSession`, `refundSession` | ordered preparatory and final transactions for Settle and every refund path (`Full`, `Partial`, public balance withdrawal), in v1 or v0 + LUT, with CT hook extras resolved at `u64::MAX` and public-withdrawal extras at the actual public amount; Apply is a single transaction. Sending and retries are the caller's |
 
 In TypeScript, `encryptAmount` and the Settle builder need `PedersenOpening.fromBytes` from `@solana/zk-sdk` 0.5.4 or later (4.3).
@@ -694,21 +694,21 @@ Confidential flows:
 
 Negative cases:
 
-| Case | Expected |
-| --- | --- |
-| Amount substitution | `ConfidentialAmountBMismatch` |
-| Foreign key in an equality context | `ConfidentialAmountBMismatch` |
-| Equality bound to a different validity context | `ConfidentialAmountBMismatch` |
-| Foreign context authority | `ProofContextAuthorityMismatch` |
-| Wrong context length or type | `InvalidProofContext` |
-| `Option` or `LegBRefund` mode and placeholders disagree | `InvalidInstructionData` |
-| `Full` that leaves available non-zero | `EscrowBalanceNotZero` |
-| Zero context does not match the escrow balance | `EscrowBalanceNotZero` |
-| `leg_b_refund = None` while leg B is funded | `LegBRefundRequired` |
-| `mint_b` without CT | `MintNotConfidential` |
-| Recipient not ready, each check (including a manual-approval mint without approve) | the matching `Recipient*` error |
-| Public balance in escrow B before Create | `EscrowPublicBalanceNotEmpty` |
-| `amount_b >= 2^48` | rejected by the client check (4.4) |
+| Case                                                                               | Expected                           |
+| ---------------------------------------------------------------------------------- | ---------------------------------- |
+| Amount substitution                                                                | `ConfidentialAmountBMismatch`      |
+| Foreign key in an equality context                                                 | `ConfidentialAmountBMismatch`      |
+| Equality bound to a different validity context                                     | `ConfidentialAmountBMismatch`      |
+| Foreign context authority                                                          | `ProofContextAuthorityMismatch`    |
+| Wrong context length or type                                                       | `InvalidProofContext`              |
+| `Option` or `LegBRefund` mode and placeholders disagree                            | `InvalidInstructionData`           |
+| `Full` that leaves available non-zero                                              | `EscrowBalanceNotZero`             |
+| Zero context does not match the escrow balance                                     | `EscrowBalanceNotZero`             |
+| `leg_b_refund = None` while leg B is funded                                        | `LegBRefundRequired`               |
+| `mint_b` without CT                                                                | `MintNotConfidential`              |
+| Recipient not ready, each check (including a manual-approval mint without approve) | the matching `Recipient*` error    |
+| Public balance in escrow B before Create                                           | `EscrowPublicBalanceNotEmpty`      |
+| `amount_b >= 2^48`                                                                 | rejected by the client check (4.4) |
 
 Mode separation: instructions 1-4 on a confidential swap, RecoverDvp on a CT escrow, and 7-10 or 12 on an open public swap fail with `SwapModeMismatch`; RecoverConfidentialDvp and Apply on a public escrow of a closed swap fail with `EscrowNotConfidential`. Nothing changes in either case. RecoverDvp still recovers leg A of a closed confidential swap.
 
