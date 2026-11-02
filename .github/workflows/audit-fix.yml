@@ -35,7 +35,6 @@ jobs:
         run: |
           pnpm audit --ignore GHSA-gcqx-w48m-w2h4 --fix || true
           pnpm install --lockfile-only
-          pnpm exec prettier --write pnpm-lock.yaml pnpm-workspace.yaml package.json
 
       - name: Update vulnerable crates
         run: |
@@ -48,6 +47,9 @@ jobs:
         run: |
           pnpm audit --ignore GHSA-gcqx-w48m-w2h4
           cargo audit
+
+      - name: Format files pnpm rewrote
+        run: pnpm exec prettier --write --no-error-on-unmatched-pattern pnpm-workspace.yaml package.json
 
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
