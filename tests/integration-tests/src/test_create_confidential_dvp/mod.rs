@@ -6,8 +6,9 @@ use crate::{
     },
     state_utils::{AMOUNT_A, AMOUNT_B},
     utils::{
-        create_ata, set_mint, set_mint_2022_with_confidential_transfer_fee, TestContext,
-        SWAP_PROGRAM_ID, TOKEN_2022_PROGRAM_ID as TOKEN, TOKEN_PROGRAM_ID,
+        create_ata, set_mint, set_mint_2022_with_confidential_transfer_fee,
+        token_2022_mint_account, TestContext, MINT_2022_FIRST_TLV_OFFSET, SWAP_PROGRAM_ID,
+        TOKEN_2022_PROGRAM_ID as TOKEN, TOKEN_PROGRAM_ID,
     },
 };
 use dvp_swap_program_client::{
@@ -21,7 +22,11 @@ use solana_signer::Signer;
 use spl_token_2022_interface::{
     error::TokenError,
     extension::confidential_transfer::instruction as ct_ix,
-    extension::{transfer_hook::TransferHookAccount, BaseStateWithExtensions, StateWithExtensions},
+    extension::{
+        confidential_transfer_fee, permissioned_burn, transfer_fee,
+        transfer_hook::TransferHookAccount, BaseStateWithExtensions, ExtensionType,
+        StateWithExtensions,
+    },
     instruction as token_ix,
     state::Account as TokenAccount,
 };
@@ -354,6 +359,136 @@ fn create_rejects_fee_configured_confidential_mint() {
         InstructionError::Custom(Error::BlockedMintExtension as u32),
     );
     assert!(context.get_account(&f.accounts.swap_dvp).is_none());
+}
+
+/// Leg B mint built by the runtime with extensions in TLV order. `rate`
+/// adds TransferFeeConfig and the ConfidentialTransferFeeConfig it needs.
+fn set_leg_b_mint(
+    context: &mut TestContext,
+    mint_b: &Address,
+    extensions: &[ExtensionType],
+    rate: Option<u16>,
+) {
+    let authority = context.payer.pubkey();
+    let account = token_2022_mint_account(context, extensions, |mint| {
+        extensions
+            .iter()
+            .map(|extension| match extension {
+                ExtensionType::PermissionedBurn => {
+                    permissioned_burn::instruction::initialize(&TOKEN, mint, &authority).unwrap()
+                }
+                ExtensionType::ConfidentialTransferMint => {
+                    ct_ix::initialize_mint(&TOKEN, mint, Some(authority), true, None).unwrap()
+                }
+                ExtensionType::TransferFeeConfig => {
+                    transfer_fee::instruction::initialize_transfer_fee_config(
+                        &TOKEN,
+                        mint,
+                        Some(&authority),
+                        Some(&authority),
+                        rate.unwrap(),
+                        10_000,
+                    )
+                    .unwrap()
+                }
+                ExtensionType::ConfidentialTransferFeeConfig => {
+                    confidential_transfer_fee::instruction::initialize_confidential_transfer_fee_config(
+                        &TOKEN,
+                        mint,
+                        Some(authority),
+                        &Default::default(),
+                    )
+                    .unwrap()
+                }
+                other => panic!("unsupported extension {other:?}"),
+            })
+            .collect()
+    });
+    context.svm.set_account(*mint_b, account).unwrap();
+}
+
+/// PermissionedBurn (type 28) placed before a blocked extension must not hide
+/// it from Create.
+#[test]
+fn create_rejects_blocked_extension_after_permissioned_burn() {
+    use ExtensionType::*;
+    // Token-2022 refuses NonTransferable with ConfidentialTransferMint, so
+    // leg B only needs the fee case; public tests cover NonTransferable.
+    let extensions = [
+        ConfidentialTransferMint,
+        PermissionedBurn,
+        TransferFeeConfig,
+        ConfidentialTransferFeeConfig,
+    ];
+    for rate in [100, 0] {
+        let mut context = TestContext::new();
+        let f = ConfidentialDvpFixture::new(&mut context, true, false);
+        set_leg_b_mint(&mut context, &f.accounts.mint_b, &extensions, Some(rate));
+        assert_error(
+            &mut context,
+            &f.create_instructions(),
+            &[],
+            1,
+            InstructionError::Custom(Error::BlockedMintExtension as u32),
+        );
+        assert!(context.get_account(&f.accounts.swap_dvp).is_none());
+    }
+}
+
+/// An unknown extension type between ConfidentialTransferMint and the fee
+/// config must reject leg B before any CPI.
+#[test]
+fn create_rejects_unknown_extension_type_on_leg_b() {
+    use ExtensionType::*;
+    let mut context = TestContext::new();
+    let f = ConfidentialDvpFixture::new(&mut context, true, false);
+    let extensions = [
+        ConfidentialTransferMint,
+        PermissionedBurn,
+        TransferFeeConfig,
+        ConfidentialTransferFeeConfig,
+    ];
+    set_leg_b_mint(&mut context, &f.accounts.mint_b, &extensions, Some(0));
+    let mut account = context.get_account(&f.accounts.mint_b).unwrap();
+    let mut offset = MINT_2022_FIRST_TLV_OFFSET;
+    loop {
+        let kind = u16::from_le_bytes([account.data[offset], account.data[offset + 1]]);
+        if kind == PermissionedBurn as u16 {
+            account.data[offset..offset + 2].copy_from_slice(&u16::MAX.to_le_bytes());
+            break;
+        }
+        offset +=
+            4 + u16::from_le_bytes([account.data[offset + 2], account.data[offset + 3]]) as usize;
+    }
+    context.svm.set_account(f.accounts.mint_b, account).unwrap();
+
+    let failure = send_v1(&mut context, &f.create_instructions(), &[]).unwrap_err();
+    assert_eq!(
+        failure.err,
+        solana_transaction::TransactionError::InstructionError(
+            1,
+            InstructionError::InvalidAccountData,
+        ),
+        "{:?}",
+        failure.meta.logs
+    );
+    assert!(!failure.meta.logs.iter().any(|s| s.contains("invoke [2]")));
+}
+
+#[test]
+fn create_accepts_permissioned_burn_before_confidential_mint() {
+    let mut context = TestContext::new();
+    let f = ConfidentialDvpFixture::new(&mut context, true, false);
+    set_leg_b_mint(
+        &mut context,
+        &f.accounts.mint_b,
+        &[
+            ExtensionType::PermissionedBurn,
+            ExtensionType::ConfidentialTransferMint,
+        ],
+        None,
+    );
+    f.create(&mut context);
 }
 
 #[test]
