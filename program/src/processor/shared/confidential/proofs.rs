@@ -2,9 +2,9 @@
 
 use core::mem::size_of;
 use pinocchio::{account::AccountView, error::ProgramError, Address, ProgramResult};
-use spl_token_2022::extension::confidential_transfer::ConfidentialTransferAccount;
-pub use spl_token_2022::solana_zk_sdk::zk_elgamal_proof_program::proof_data::ProofType;
-use spl_token_2022::solana_zk_sdk::zk_elgamal_proof_program::{
+use spl_token_2022_interface::extension::confidential_transfer::ConfidentialTransferAccount;
+pub use spl_token_2022_interface::solana_zk_elgamal_proof_interface::proof_data::ProofType;
+use spl_token_2022_interface::solana_zk_elgamal_proof_interface::{
     self,
     proof_data::{
         BatchedGroupedCiphertext3HandlesValidityProofContext, BatchedRangeProofContext,
@@ -18,7 +18,7 @@ use super::{read_confidential_account, ELGAMAL_CIPHERTEXT_LEN};
 use crate::{error::DvpSwapProgramError, require};
 
 pub const ZK_ELGAMAL_PROOF_PROGRAM_ID: Address =
-    Address::new_from_array(zk_elgamal_proof_program::ID.to_bytes());
+    Address::new_from_array(solana_zk_elgamal_proof_interface::ID.to_bytes());
 const PUBKEY_LEN: usize = 32;
 // Context-state header: authority pubkey, then the ProofType byte.
 pub const PROOF_CONTEXT_HEADER_LEN: usize = size_of::<ProofContextStateMeta>();
