@@ -419,20 +419,22 @@ fn prop_recover_and_nonce() {
     }) {
         panic!("{e}");
     }
-    let k = (runner.config().cases as usize / 64).max(1);
-    COV.report_and_check(&[
-        ("recover_while_open_rejected", 64 * k),
-        ("closed_by_settle", 10 * k),
-        ("closed_by_cancel", 10 * k),
-        ("recover_nonempty", 5 * k),
-        ("recover_nonempty_hook", 2 * k),
-        ("recover_empty_closes", 3 * k),
-        ("recover_no_escrow_rejected", 10 * k),
-        ("late_deposit", 10 * k),
-        ("donor_late_deposit", 3 * k),
-        ("recover_wrong_signer", 10 * k),
-        ("create_same_nonce_rejected", 5 * k),
-        ("sibling_funded", 3 * k),
-        ("sibling_cancelled_with_funds", 3 * k),
-    ]);
+    COV.report_and_check(
+        runner.config().cases,
+        &[
+            ("recover_while_open_rejected", 64),
+            ("closed_by_settle", 10),
+            ("closed_by_cancel", 10),
+            ("recover_nonempty", 5),
+            ("recover_nonempty_hook", 2),
+            ("recover_empty_closes", 3),
+            ("recover_no_escrow_rejected", 10),
+            ("late_deposit", 10),
+            ("donor_late_deposit", 3),
+            ("recover_wrong_signer", 10),
+            ("create_same_nonce_rejected", 5),
+            ("sibling_funded", 3),
+            ("sibling_cancelled_with_funds", 3),
+        ],
+    );
 }

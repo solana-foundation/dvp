@@ -456,23 +456,24 @@ fn prop_lifecycle_matches_model() {
     if let Err(e) = runner.run(&case(), |(ka, kb, ops)| run_case(ka, kb, &ops)) {
         panic!("{e}");
     }
-    // Minimums are sized for 64 cases and scale with PROPTEST_CASES.
-    let k = (runner.config().cases as usize / 64).max(1);
-    COV.report_and_check(&[
-        ("case_with_hook", 15 * k),
-        ("case_legacy_only", 2 * k),
-        ("case_t22_no_hook", 5 * k),
-        ("settle_ok_exact", 2 * k),
-        ("settle_ok_with_surplus", 3 * k),
-        ("settle_ok_surplus_hook", 2 * k),
-        ("settle_underfunded", 3 * k),
-        ("settle_after_expiry", k),
-        ("terminal_refund", 2 * k),
-        ("terminal_refund_hook", 2 * k),
-        ("reclaim_nonempty", 3 * k),
-        ("dust_donated", 3 * k),
-        ("L3_refund_blocked_no_ata", 3 * k),
-        ("L3_settle_blocked_no_refund_ata", 2 * k),
-        ("wrong_signer", 5 * k),
-    ]);
+    COV.report_and_check(
+        runner.config().cases,
+        &[
+            ("case_with_hook", 15),
+            ("case_legacy_only", 2),
+            ("case_t22_no_hook", 5),
+            ("settle_ok_exact", 2),
+            ("settle_ok_with_surplus", 3),
+            ("settle_ok_surplus_hook", 2),
+            ("settle_underfunded", 3),
+            ("settle_after_expiry", 1),
+            ("terminal_refund", 2),
+            ("terminal_refund_hook", 2),
+            ("reclaim_nonempty", 3),
+            ("dust_donated", 3),
+            ("L3_refund_blocked_no_ata", 3),
+            ("L3_settle_blocked_no_refund_ata", 2),
+            ("wrong_signer", 5),
+        ],
+    );
 }

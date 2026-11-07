@@ -270,14 +270,16 @@ fn prop_mint_extensions() {
     if let Err(e) = runner.run(&case(), |(a, b, m)| run_case(a, b, m)) {
         panic!("{e}");
     }
-    let k = (runner.config().cases as usize / 64).max(1);
-    COV.report_and_check(&[
-        ("create_denied", 10 * k),
-        ("settled", 5 * k),
-        ("post_create_mutation", 3 * k),
-        ("hook", 2 * k),
-        ("pausable", 2 * k),
-        ("permanent_delegate", 2 * k),
-        ("confidential", 2 * k),
-    ]);
+    COV.report_and_check(
+        runner.config().cases,
+        &[
+            ("create_denied", 10),
+            ("settled", 5),
+            ("post_create_mutation", 3),
+            ("hook", 2),
+            ("pausable", 2),
+            ("permanent_delegate", 2),
+            ("confidential", 2),
+        ],
+    );
 }

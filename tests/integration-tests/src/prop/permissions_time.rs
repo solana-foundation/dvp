@@ -154,14 +154,16 @@ fn prop_settle_time_window() {
     if let Err(e) = runner.run(&time_case(), |(exp, ear, p)| run_time_case(exp, ear, p)) {
         panic!("{e}");
     }
-    let k = (runner.config().cases as usize / 64).max(1);
-    COV_TIME.report_and_check(&[
-        ("create_rejected", 3 * k),
-        ("settle_at_expiry", 2 * k),
-        ("settle_at_expiry_plus1", 2 * k),
-        ("settle_at_earliest", k),
-        ("settle_at_earliest_minus1", k),
-    ]);
+    COV_TIME.report_and_check(
+        runner.config().cases,
+        &[
+            ("create_rejected", 3),
+            ("settle_at_expiry", 2),
+            ("settle_at_expiry_plus1", 2),
+            ("settle_at_earliest", 1),
+            ("settle_at_earliest_minus1", 1),
+        ],
+    );
 }
 
 // ---------- who may terminate ----------
@@ -250,11 +252,8 @@ fn prop_permissions() {
     if let Err(e) = runner.run(&perm_case(), |(w, a, t)| run_perm_case(w, a, t)) {
         panic!("{e}");
     }
-    let k = (runner.config().cases as usize / 64).max(1);
-    COV_PERM.report_and_check(&[
-        ("settle", 2 * k),
-        ("cancel", 2 * k),
-        ("reject", 4 * k),
-        ("denied", 20 * k),
-    ]);
+    COV_PERM.report_and_check(
+        runner.config().cases,
+        &[("settle", 2), ("cancel", 2), ("reject", 4), ("denied", 20)],
+    );
 }

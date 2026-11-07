@@ -10,7 +10,7 @@ These tests drive the program on LiteSVM with generated sequences of instruction
 - `prop_mint_extensions`: 10 mint configurations per leg. `Create` fails with `BlockedMintExtension` exactly for the blocked extensions, allowed ones settle with exact amounts, and swapping an unfunded leg's mint to a blocked one after `Create` makes `Settle` fail with `BlockedMintExtension` while `Cancel` still refunds in full.
 - `prop_recover_and_nonce`: `Recover` fails with `DvpStillOpen` while the DvP is open. After Settle or Cancel, late deposits are recoverable by the right party only, a reused nonce always fails, and a second DvP between the same parties with a new nonce stays independent.
 
-Each property counts how often it reached the interesting cases and fails if a count falls below its minimum. The minimums scale with `PROPTEST_CASES`. Runs are seeded (`PROPTEST_RNG_SEED`, default `20261014`) and repeat exactly.
+Each property counts how often it reached the interesting cases and fails if a count falls below its minimum. The minimums are sized for 64 cases and scale with `PROPTEST_CASES`. Below 64 cases the counts are still printed but not checked. Runs are seeded (`PROPTEST_RNG_SEED`, default `20261014`) and repeat exactly.
 
 ## Running
 

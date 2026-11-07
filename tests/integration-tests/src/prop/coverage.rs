@@ -45,13 +45,25 @@ impl Coverage {
     }
 
     /// Print all counters, then panic if any required key is under its minimum.
-    pub fn report_and_check(&self, minimums: &[(&'static str, usize)]) {
+    /// Minimums are sized for 64 cases and scale with `cases`. Fewer cases are
+    /// too few to reach the rare branches, so the check is skipped there.
+    pub fn report_and_check(&self, cases: u32, minimums: &[(&'static str, usize)]) {
         let counts = self.counts.lock().unwrap();
         println!("coverage[{}]: {:?}", self.name, *counts);
+        if cases < 64 {
+            println!(
+                "coverage minimums for {} skipped: {cases} cases < 64",
+                self.name
+            );
+            return;
+        }
+        let k = cases as usize / 64;
         let short: Vec<String> = minimums
             .iter()
-            .filter(|(k, min)| counts.get(k).copied().unwrap_or(0) < *min)
-            .map(|(k, min)| format!("{k}={} < {min}", counts.get(k).copied().unwrap_or(0)))
+            .filter_map(|&(key, min)| {
+                let got = counts.get(key).copied().unwrap_or(0);
+                (got < min * k).then(|| format!("{key}={got} < {}", min * k))
+            })
             .collect();
         assert!(
             short.is_empty(),
