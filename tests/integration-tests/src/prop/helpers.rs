@@ -213,6 +213,13 @@ pub fn reject(ctx: &mut TestContext, f: &DvpFixture, x: &Extras, signer: &Keypai
     ctx.send(ix, &[signer])
 }
 
+/// True if the transaction failed with the program's custom error `code`.
+pub fn failed_with(r: &TxResult, code: u32) -> bool {
+    r.as_ref()
+        .err()
+        .is_some_and(|e| e.contains(&format!("Custom({code})")))
+}
+
 /// True if the account is gone (absent, or drained and zeroed).
 pub fn is_closed(ctx: &TestContext, key: &Address) -> bool {
     match ctx.get_account(key) {

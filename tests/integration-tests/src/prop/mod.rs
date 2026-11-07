@@ -5,6 +5,7 @@
 //! `state_utils` helpers of this crate.
 
 mod coverage;
+mod extensions;
 mod helpers;
 mod legs;
 mod lifecycle;
