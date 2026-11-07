@@ -10,3 +10,4 @@ mod helpers;
 mod legs;
 mod lifecycle;
 mod permissions_time;
+mod recover;

@@ -4,13 +4,18 @@
 //! legs without a hook they are empty.
 
 use dvp_swap_program_client::instructions::{
-    CancelDvpBuilder, CreateDvpBuilder, ReclaimDvpBuilder, RejectDvpBuilder, SettleDvpBuilder,
+    CancelDvpBuilder, CreateDvpBuilder, ReclaimDvpBuilder, RecoverDvpBuilder, RejectDvpBuilder,
+    SettleDvpBuilder,
 };
 use litesvm::types::TransactionMetadata;
 use solana_address::Address;
 use solana_instruction::AccountMeta;
 use solana_keypair::Keypair;
 use solana_signer::Signer;
+use spl_associated_token_account_interface::{
+    address::get_associated_token_address_with_program_id,
+    instruction::create_associated_token_account_idempotent,
+};
 use spl_token_2022_interface::instruction::{close_account, transfer_checked};
 
 use crate::state_utils::{DvpFixture, AMOUNT_A, AMOUNT_B, REF_STRING};
@@ -211,6 +216,78 @@ pub fn reject(ctx: &mut TestContext, f: &DvpFixture, x: &Extras, signer: &Keypai
         .add_remaining_accounts(&x.both())
         .instruction();
     ctx.send(ix, &[signer])
+}
+
+/// RecoverDvp: `signer` asks to drain the recreated escrow of the leg whose
+/// mint is `leg_a ? mint_a : mint_b` into the signer's canonical ATA.
+pub fn recover(
+    ctx: &mut TestContext,
+    f: &DvpFixture,
+    x: &Extras,
+    signer: &Keypair,
+    leg_a: bool,
+) -> TxResult {
+    let (mint, tp) = leg_accounts(f, leg_a);
+    let escrow = if leg_a { f.dvp_ata_a } else { f.dvp_ata_b };
+    let dest = get_associated_token_address_with_program_id(&signer.pubkey(), &mint, &tp);
+    let ix = RecoverDvpBuilder::new()
+        .signer(signer.pubkey())
+        .swap_dvp(f.swap_dvp)
+        .nonce_tombstone(f.nonce_tombstone)
+        .mint(mint)
+        .dvp_escrow_ata(escrow)
+        .signer_dest_ata(dest)
+        .token_program(tp)
+        .memo_program(MEMO_PROGRAM_ID)
+        .settlement_authority(f.settlement_authority.pubkey())
+        .user_a(f.user_a.pubkey())
+        .user_b(f.user_b.pubkey())
+        .mint_a(f.mint_a)
+        .mint_b(f.mint_b)
+        .nonce(f.nonce)
+        .add_remaining_accounts(x.leg(leg_a))
+        .instruction();
+    ctx.send(ix, &[signer])
+}
+
+/// Anyone (the payer) creates the canonical escrow ATA of `f.swap_dvp` for a
+/// leg — the way a late deposit can land after the DvP closed.
+pub fn recreate_escrow(ctx: &mut TestContext, f: &DvpFixture, leg_a: bool) -> TxResult {
+    let (mint, tp) = leg_accounts(f, leg_a);
+    let ix =
+        create_associated_token_account_idempotent(&ctx.payer.pubkey(), &f.swap_dvp, &mint, &tp);
+    ctx.send(ix, &[])
+}
+
+/// Same parties and mints as `f`, different nonce: a second, independent DvP.
+pub fn sibling(f: &DvpFixture, nonce: u64) -> DvpFixture {
+    let (swap_dvp, _) = crate::utils::swap_dvp_pda(
+        &f.settlement_authority.pubkey(),
+        &f.user_a.pubkey(),
+        &f.user_b.pubkey(),
+        &f.mint_a,
+        &f.mint_b,
+        nonce,
+    );
+    DvpFixture {
+        user_a: f.user_a.insecure_clone(),
+        user_b: f.user_b.insecure_clone(),
+        settlement_authority: f.settlement_authority.insecure_clone(),
+        mint_a: f.mint_a,
+        mint_b: f.mint_b,
+        token_program_a: f.token_program_a,
+        token_program_b: f.token_program_b,
+        swap_dvp,
+        nonce_tombstone: crate::utils::nonce_tombstone_pda(&swap_dvp).0,
+        user_a_ata_a: f.user_a_ata_a,
+        user_a_ata_b: f.user_a_ata_b,
+        user_b_ata_a: f.user_b_ata_a,
+        user_b_ata_b: f.user_b_ata_b,
+        dvp_ata_a: crate::utils::dvp_ata(&swap_dvp, &f.mint_a, &f.token_program_a),
+        dvp_ata_b: crate::utils::dvp_ata(&swap_dvp, &f.mint_b, &f.token_program_b),
+        expiry: f.expiry,
+        nonce,
+    }
 }
 
 /// True if the transaction failed with the program's custom error `code`.
