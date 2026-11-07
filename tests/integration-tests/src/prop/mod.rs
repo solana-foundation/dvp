@@ -2,7 +2,7 @@
 //!
 //! Each property drives the program on LiteSVM with generated sequences and
 //! compares every step with a small reference model. Reuses the `utils` /
-//! `state_utils` helpers of this crate.
+//! `state_utils` helpers of this crate. See `README.md` in this directory.
 
 mod coverage;
 mod extensions;
