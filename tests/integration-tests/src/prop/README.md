@@ -12,6 +12,8 @@ These tests drive the program on LiteSVM with generated sequences of instruction
 
 Each property counts how often it reached the interesting cases and fails if a count falls below its minimum. The minimums are sized for 64 cases and scale with `PROPTEST_CASES`. Below 64 cases the counts are still printed but not checked. Runs are seeded (`PROPTEST_RNG_SEED`, default `20261014`) and repeat exactly.
 
+A draft list of the invariants these properties check, with the code that enforces each one, is in [INVARIANTS.md](INVARIANTS.md).
+
 ## Running
 
 After `just build`, from `tests/integration-tests/`:
@@ -23,4 +25,4 @@ PROPTEST_CASES=512 cargo test prop:: -- --test-threads=4   # long run
 
 ## Not covered yet
 
-A transfer hook whose behaviour depends on the recipient or the amount, WSOL legs, memo-required accounts, smart-wallet parties.
+See the end of [INVARIANTS.md](INVARIANTS.md).
