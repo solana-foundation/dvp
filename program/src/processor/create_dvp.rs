@@ -104,10 +104,12 @@ pub fn process_create_dvp(
     verify_party_signer_capable(user_b_info)?;
     verify_account_owner(mint_a_info, token_program_a_info.address())?;
     verify_account_owner(mint_b_info, token_program_b_info.address())?;
-    validate_mint_extensions(mint_a_info)?;
-    validate_mint_extensions(mint_b_info)?;
+    // New trades require both active and scheduled transfer-fee rates to be zero.
+    let clock = Clock::get()?;
+    validate_mint_extensions(mint_a_info, clock.epoch, true)?;
+    validate_mint_extensions(mint_b_info, clock.epoch, true)?;
 
-    let now = Clock::get()?.unix_timestamp;
+    let now = clock.unix_timestamp;
     validate_args(
         &args,
         settlement_authority_info.address(),
