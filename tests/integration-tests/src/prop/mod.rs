@@ -6,4 +6,6 @@
 
 mod coverage;
 mod helpers;
+mod legs;
+mod lifecycle;
 mod permissions_time;
