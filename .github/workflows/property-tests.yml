@@ -1,0 +1,35 @@
+name: Property Tests
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: property-tests
+  cancel-in-progress: false
+
+jobs:
+  long-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PROPTEST_CASES: 512
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - uses: ./.github/actions/setup
+        with:
+          rust-cache-key: "rust-dev"
+
+      - name: Build program and fixtures
+        run: just build
+
+      - name: Run property tests
+        working-directory: tests/integration-tests
+        run: "cargo test prop:: -- --nocapture"
