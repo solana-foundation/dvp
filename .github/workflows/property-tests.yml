@@ -18,6 +18,8 @@ jobs:
     timeout-minutes: 120
     env:
       PROPTEST_CASES: 512
+      # A new seed on every nightly run; a manual run keeps the default seed.
+      PROPTEST_RNG_SEED: ${{ github.event_name == 'schedule' && github.run_id || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -7,9 +7,11 @@ use std::sync::Mutex;
 
 use proptest::test_runner::{Config, RngAlgorithm, TestRng, TestRunner};
 
-/// Test runner seeded from `PROPTEST_RNG_SEED` (u64, default 20261014), so a
-/// run — and its coverage counts — is reproducible. `TestRunner::new` does
-/// not read that variable in proptest 1.6.
+/// Test runner seeded from `PROPTEST_RNG_SEED` (u64, default 20261014), so the
+/// same seed generates the same sequences. `TestRunner::new` does not read
+/// that variable in proptest 1.6. Failure persistence is off: the runner is
+/// built by hand, so proptest has no source file to save regressions next
+/// to, and the seed is what reproduces a run.
 pub fn seeded_runner() -> TestRunner {
     let seed: u64 = std::env::var("PROPTEST_RNG_SEED")
         .ok()
@@ -21,6 +23,7 @@ pub fn seeded_runner() -> TestRunner {
     TestRunner::new_with_rng(
         Config {
             max_shrink_iters: 256,
+            failure_persistence: None,
             ..Config::default()
         },
         TestRng::from_seed(RngAlgorithm::ChaCha, &bytes),

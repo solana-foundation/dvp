@@ -22,11 +22,11 @@ Code: `program/src/processor/settle_dvp.rs:247`, `program/src/processor/settle_d
 
 ### DVP-INV-03 Token totals are conserved per mint
 
-For each mint the sum over every account that can hold it stays the same after every step, accepted or rejected. This relies on the deny-list of amount-mutating extensions described in the comment above `validate_mint_extensions`. Both tests sum the balances directly, independent of the model, after every step (the recover test after every step following the close). Deposits are generated, but the DvP amounts and the starting balances are fixed.
+For each mint the sum over every account that can hold it stays the same after every step, accepted or rejected. In these tests that holds because every move is a `TransferChecked` between accounts the test tracks. They only generate legacy SPL Token, Token-2022 and Token-2022 with the transfer-hook fixture, so the result does not depend on the extension deny-list. The deny-list guards a related invariant, which the comment above `validate_mint_extensions` (`token_utils.rs:279`) calls "escrow balance == sum of deposits", against `TransferFee` and the other amount-mutating extensions. Both tests sum the balances directly, independent of the model, after every step (the recover test after every step following the close). Deposits are generated, but the DvP amounts and the starting balances are fixed.
 
 Tests: `prop::lifecycle::prop_lifecycle_matches_model`, `prop::recover::prop_recover_and_nonce`
 
-Code: `program/src/processor/shared/token_utils.rs:339`
+Code: `program/src/processor/shared/token_utils.rs:339` (the deny-list check that keeps `TransferFee` and the other amount-mutating extensions out)
 
 ### DVP-INV-04 A terminal instruction closes everything, once
 
@@ -38,7 +38,7 @@ Code: `program/src/processor/settle_dvp.rs:311`, `program/src/processor/settle_d
 
 ### DVP-INV-05 A refund into a missing ATA blocks until the ATA is recreated
 
-While `user_a`'s mint A ATA is closed, Settle with surplus on leg A and Cancel, Reject or Reclaim with a non-empty escrow A fail, because the transfer into that ATA fails. Once anyone recreates the ATA they succeed again (Cantina L3). The recreate step is generated but has no coverage minimum of its own.
+While `user_a`'s mint A ATA is closed, Settle with surplus on leg A and Cancel, Reject or Reclaim with a non-empty escrow A fail, because the transfer into that ATA fails. Once anyone recreates the ATA they succeed again. This is finding 3.2.3 of the Cantina audit, "Dust surplus can block settlement when refund ATAs are absent". The recreate step is generated but has no coverage minimum of its own.
 
 Tests: `prop::lifecycle::prop_lifecycle_matches_model`
 
@@ -86,7 +86,7 @@ Code: `program/src/processor/create_dvp.rs:107`, `program/src/processor/shared/t
 
 ### DVP-INV-11 Settle rechecks the mints, Cancel still refunds
 
-If an unfunded leg's mint gets a blocked extension after Create, Settle fails with `BlockedMintExtension` and Cancel still refunds both parties in full. The test stands in for closing and recreating the mint by rewriting the mint account, and checks the error code.
+If an unfunded leg's mint gets a blocked extension after Create, Settle fails with `BlockedMintExtension`, and Cancel still returns the funded leg in full and closes the DvP. Cancel succeeds because the recovery paths skip the extension check, as the comment above `validate_mint_extensions` says (`token_utils.rs:318`). The test stands in for closing and recreating the mint by rewriting the mint account directly. It does not model the preconditions for closing a mint (`MintCloseAuthority`, zero supply). It checks the error code.
 
 Tests: `prop::extensions::prop_mint_extensions`
 

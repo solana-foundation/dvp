@@ -183,10 +183,12 @@ fn run_case(
     COV.hit(cb.name());
 
     // Post-create mutation, modelled on the attack described in `settle_dvp.rs`: a party
-    // leaves its OWN leg unfunded, closes that zero-supply mint and recreates it
-    // with a denied extension. Only the unfunded leg can be swapped — a mint
-    // whose tokens sit in escrow has non-zero supply and cannot be closed.
-    // Only Token-2022 legs (a legacy mint cannot carry extensions).
+    // leaves its OWN leg unfunded and the mint is recreated with a denied
+    // extension. The test rewrites the mint account directly. It does not model
+    // the preconditions for closing a mint (`MintCloseAuthority`, zero supply),
+    // and the depositor here still holds a balance of that mint. Only the
+    // unfunded leg is swapped, and only Token-2022 legs (a legacy mint cannot
+    // carry extensions).
     let mutate = mutate.filter(|(leg_a, _)| if *leg_a { ca } else { cb } != MintCfg::Legacy);
     if let Some((swap_a, bad)) = mutate {
         // Fund only the other leg.

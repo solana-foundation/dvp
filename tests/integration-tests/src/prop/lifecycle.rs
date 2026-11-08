@@ -1,7 +1,8 @@
 //! Model-based lifecycle over every leg configuration
 //! (legacy SPL Token / Token-2022 / Token-2022 + transfer hook on each leg).
 //! Random sequences of Fund / Reclaim / Settle / Cancel / Reject / clock
-//! moves / wrong signers, plus the Cantina L3 scenario on leg A: a third
+//! moves / wrong signers, plus Cantina audit finding 3.2.3 ("Dust surplus
+//! can block settlement when refund ATAs are absent") on leg A: a third
 //! party donates "dust" into escrow A, user_a empties and closes the refund
 //! ATA, anyone recreates it.
 //!
@@ -11,7 +12,7 @@
 //! - per mint, the total over all accounts that can hold it never changes;
 //! - after any terminal instruction the SwapDvp PDA and both escrows are closed.
 //!
-//! Model of L3, as documented on `user_a_ata_a` in `settle_dvp.rs`: a refund
+//! Model of 3.2.3, as documented on `user_a_ata_a` in `settle_dvp.rs`: a refund
 //! into a missing ATA fails, so Settle with surplus on leg A, and Cancel /
 //! Reject / Reclaim with a non-empty escrow A, are rejected while user_a's
 //! ATA is closed — and succeed again once it is recreated.
@@ -48,9 +49,9 @@ enum Op {
     CancelByUserB,
     RejectByAuthority,
     ReclaimByAuthority,
-    /// L3: a third party sends mint A into escrow A.
+    /// 3.2.3: a third party sends mint A into escrow A.
     DonorDustA(u64),
-    /// L3: user_a moves all mint A to a side wallet and closes the ATA.
+    /// 3.2.3: user_a moves all mint A to a side wallet and closes the ATA.
     CloseRefundAtaA,
     /// Anyone (the payer) recreates user_a's mint-A ATA (idempotent).
     RecreateAtaA,
@@ -62,6 +63,10 @@ fn surplus() -> impl Strategy<Value = u64> {
     prop_oneof![1 => Just(0u64), 2 => 1u64..=50]
 }
 
+fn terminal() -> impl Strategy<Value = Op> {
+    prop_oneof![Just(Op::Cancel), Just(Op::RejectA), Just(Op::RejectB)]
+}
+
 fn prefix() -> impl Strategy<Value = Vec<Op>> {
     prop_oneof![
         3 => (surplus(), surplus())
@@ -71,12 +76,20 @@ fn prefix() -> impl Strategy<Value = Vec<Op>> {
         1 => Just(vec![]),
         // Exact funding settled right away (dust ops otherwise make exact settles rare).
         1 => Just(vec![Op::FundA(AMOUNT_A), Op::FundB(AMOUNT_B), Op::Settle]),
-        // Cantina L3 set-up: dust from a third party, then user_a closes the refund ATA.
+        // Finding 3.2.3 set-up: dust from a third party, then user_a closes the refund ATA.
         1 => (surplus(), 1u64..=DONOR_BALANCE / 4).prop_map(|(b, d)| vec![
             Op::FundA(AMOUNT_A),
             Op::FundB(AMOUNT_B + b),
             Op::DonorDustA(d),
             Op::CloseRefundAtaA,
+        ]),
+        // The same set-up, then a refund that has to fail while the ATA is closed.
+        1 => (surplus(), 1u64..=DONOR_BALANCE / 4, terminal()).prop_map(|(b, d, t)| vec![
+            Op::FundA(AMOUNT_A),
+            Op::FundB(AMOUNT_B + b),
+            Op::DonorDustA(d),
+            Op::CloseRefundAtaA,
+            t,
         ]),
     ]
 }
@@ -249,7 +262,7 @@ fn record(m: &Model, op: &Op, hook_a: bool, hook_b: bool) {
             COV.hit("settle_underfunded")
         }
         Op::Settle if settle_ok && m.esc_a > AMOUNT_A && !m.ua_a_exists => {
-            COV.hit("L3_settle_blocked_no_refund_ata")
+            COV.hit("settle_blocked_no_refund_ata")
         }
         Op::Settle if settle_ok && (m.esc_a > AMOUNT_A || m.esc_b > AMOUNT_B) => {
             COV.hit("settle_ok_with_surplus");
@@ -264,7 +277,7 @@ fn record(m: &Model, op: &Op, hook_a: bool, hook_b: bool) {
             }
         }
         Op::Cancel | Op::RejectA | Op::RejectB if m.open && !m.a_refundable() => {
-            COV.hit("L3_refund_blocked_no_ata")
+            COV.hit("refund_blocked_no_ata")
         }
         Op::Cancel | Op::RejectA | Op::RejectB if m.open && (hook_a || hook_b) => {
             COV.hit("terminal_refund_hook")
@@ -275,7 +288,7 @@ fn record(m: &Model, op: &Op, hook_a: bool, hook_b: bool) {
         }
         Op::DonorDustA(_) if m.open => COV.hit("dust_donated"),
         Op::RecreateAtaA if !m.ua_a_exists && m.open && m.esc_a > 0 => {
-            COV.hit("L3_recovered_by_recreate")
+            COV.hit("recovered_by_recreate")
         }
         Op::SettleByUserA | Op::CancelByUserB | Op::RejectByAuthority | Op::ReclaimByAuthority => {
             COV.hit("wrong_signer")
@@ -471,8 +484,8 @@ fn prop_lifecycle_matches_model() {
             ("terminal_refund_hook", 2),
             ("reclaim_nonempty", 3),
             ("dust_donated", 3),
-            ("L3_refund_blocked_no_ata", 3),
-            ("L3_settle_blocked_no_refund_ata", 2),
+            ("refund_blocked_no_ata", 3),
+            ("settle_blocked_no_refund_ata", 2),
             ("wrong_signer", 5),
         ],
     );
