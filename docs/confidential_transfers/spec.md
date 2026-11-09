@@ -32,7 +32,7 @@ Preserved properties: atomic Settle; the Settle payment equals the agreed amount
 
 The cap applies to one transfer, not to escrow B's balance: a larger balance, for example after several credits, is refunded in several `Partial` steps (7.2).
 
-**Manual-approval mints.** On a `mint_b` with `auto_approve_new_accounts = false`, escrow B must be approved by the mint's CT authority before it can be funded (7.3).
+**Manual-approval mints.** On a `mint_b` with `auto_approve_new_accounts = false`, escrow B must be approved by the mint's CT authority before it can be funded (7.3). Such a mint without a CT authority is rejected at Create, since escrow B could never be approved.
 
 ## 3. Principle
 
@@ -353,7 +353,7 @@ Accounts:
 
 Steps, after all CreateDvp checks (`ZeroAmount` applies to `amount_a` only):
 
-1. `mint_b` is owned by Token-2022 and has `ConfidentialTransferMint`, else `MintNotConfidential`. `TransferHook` is allowed (section 8); confidential transfer fees are rejected, as TransferFee is today.
+1. `mint_b` is owned by Token-2022 and has `ConfidentialTransferMint`, else `MintNotConfidential`. With `auto_approve_new_accounts = false` the mint must have a CT authority, else `MintConfidentialApprovalImpossible`. `TransferHook` is allowed (section 8); confidential transfer fees are rejected, as TransferFee is today.
 2. Create the escrow B ATA and run `verify_escrow_not_preloaded` before `Reallocate`, since it compares lamports with the rent of the current size.
 3. Escrow B's public `amount == 0`, else `EscrowPublicBalanceNotEmpty`. Its address is predictable, so it could hold someone else's public tokens before Create. Those are recovered through a public swap on the same seeds (`CreateDvp`, then Reclaim); the confidential swap uses another nonce.
 4. PDA signs: `Reallocate` (adds `ConfidentialTransferAccount`, payer funds) → `ConfigureAccount` (`decryptable_zero_balance`, `maximum_pending_balance_credit_counter = 65536`, PubkeyValidity read through the instructions sysvar) → `DisableNonConfidentialCredits`.
@@ -559,7 +559,7 @@ Hook programs that read or limit the amount see `u64::MAX` and may reject. The b
 
 ## 9. Errors
 
-Confidential error codes are 24-36, in the table order below. Codes 0-23 retain the source baseline ABI at `df9919e`; compare against the deployed mainnet release before upgrading.
+Confidential error codes are 24-37, in the table order below. Codes 0-23 retain the source baseline ABI at `df9919e`; compare against the deployed mainnet release before upgrading.
 
 | Error                                  | When                                                                                                          |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
@@ -576,6 +576,7 @@ Confidential error codes are 24-36, in the table order below. Codes 0-23 retain 
 | `RecipientPendingCounterFull`          | Recipient pending counter at maximum                                                                          |
 | `EscrowBalanceNotZero`                 | Settle and `Full` refunds: the zero context does not match the escrow's available balance after the transfers |
 | `LegBRefundRequired`                   | Leg B branch of Reclaim, Cancel, Reject, Recover: `leg_b_refund = None` while available is not all-zero bytes |
+| `MintConfidentialApprovalImpossible`   | CreateConfidentialDvp: `mint_b` requires manual approval but has no CT authority                              |
 
 ## 10. Security invariants
 
@@ -694,22 +695,23 @@ Confidential flows:
 
 Negative cases:
 
-| Case                                                                               | Expected                           |
-| ---------------------------------------------------------------------------------- | ---------------------------------- |
-| Amount substitution                                                                | `ConfidentialAmountBMismatch`      |
-| Foreign key in an equality context                                                 | `ConfidentialAmountBMismatch`      |
-| Equality bound to a different validity context                                     | `ConfidentialAmountBMismatch`      |
-| Foreign context authority                                                          | `ProofContextAuthorityMismatch`    |
-| Wrong context length or type                                                       | `InvalidProofContext`              |
-| `Option` or `LegBRefund` mode and placeholders disagree                            | `InvalidInstructionData`           |
-| `Full` that leaves available non-zero                                              | `EscrowBalanceNotZero`             |
-| Zero context does not match the escrow balance                                     | `EscrowBalanceNotZero`             |
-| `leg_b_refund = None` while leg B is funded                                        | `LegBRefundRequired`               |
-| `mint_b` without CT                                                                | `MintNotConfidential`              |
-| Apply after close by `user_a` or `settlement_authority`                            | `SignerNotParty`                   |
-| Recipient not ready, each check (including a manual-approval mint without approve) | the matching `Recipient*` error    |
-| Public balance in escrow B before Create                                           | `EscrowPublicBalanceNotEmpty`      |
-| `amount_b >= 2^48`                                                                 | rejected by the client check (4.4) |
+| Case                                                                               | Expected                             |
+| ---------------------------------------------------------------------------------- | ------------------------------------ |
+| Amount substitution                                                                | `ConfidentialAmountBMismatch`        |
+| Foreign key in an equality context                                                 | `ConfidentialAmountBMismatch`        |
+| Equality bound to a different validity context                                     | `ConfidentialAmountBMismatch`        |
+| Foreign context authority                                                          | `ProofContextAuthorityMismatch`      |
+| Wrong context length or type                                                       | `InvalidProofContext`                |
+| `Option` or `LegBRefund` mode and placeholders disagree                            | `InvalidInstructionData`             |
+| `Full` that leaves available non-zero                                              | `EscrowBalanceNotZero`               |
+| Zero context does not match the escrow balance                                     | `EscrowBalanceNotZero`               |
+| `leg_b_refund = None` while leg B is funded                                        | `LegBRefundRequired`                 |
+| `mint_b` without CT                                                                | `MintNotConfidential`                |
+| `mint_b` with manual approval and no CT authority                                  | `MintConfidentialApprovalImpossible` |
+| Apply after close by `user_a` or `settlement_authority`                            | `SignerNotParty`                     |
+| Recipient not ready, each check (including a manual-approval mint without approve) | the matching `Recipient*` error      |
+| Public balance in escrow B before Create                                           | `EscrowPublicBalanceNotEmpty`        |
+| `amount_b >= 2^48`                                                                 | rejected by the client check (4.4)   |
 
 Mode separation: instructions 1-4 on a confidential swap, RecoverDvp on a CT escrow, and 7-10 or 12 on an open public swap fail with `SwapModeMismatch`; RecoverConfidentialDvp and Apply on a public escrow of a closed swap fail with `EscrowNotConfidential`. Nothing changes in either case. RecoverDvp still recovers leg A of a closed confidential swap.
 

@@ -186,6 +186,7 @@ Confidential mode adds the following codes; codes 0-23 retain their numbering.
 | 34   | `RecipientPendingCounterFull`          | Recipient cannot accept another credit                         |
 | 35   | `EscrowBalanceNotZero`                 | Available balance does not match the zero proof                |
 | 36   | `LegBRefundRequired`                   | `None` refund selected while available B is not all-zero bytes |
+| 37   | `MintConfidentialApprovalImpossible`   | Leg B mint requires CT approval but has no CT authority        |
 
 ## Build & test
 

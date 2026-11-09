@@ -9,7 +9,8 @@ use crate::{
     },
     processor::shared::confidential::{
         configure_confidential_account_cpi, disable_non_confidential_credits_cpi,
-        reallocate_confidential_account_cpi, verify_confidential_mint, verify_no_transfer_fee,
+        reallocate_confidential_account_cpi, verify_confidential_escrow_approvable,
+        verify_confidential_mint, verify_no_transfer_fee,
     },
     processor::shared::pda_utils::create_pda_account,
     processor::shared::token_utils::{
@@ -70,6 +71,7 @@ pub fn process_create_confidential_dvp(
         DvpSwapProgramError::MintNotConfidential
     );
     verify_confidential_mint(mint_b_info)?;
+    verify_confidential_escrow_approvable(mint_b_info)?;
     verify_no_transfer_fee(mint_b_info)?;
     verify_ata_program(associated_token_program_info)?;
     require!(

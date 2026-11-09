@@ -361,6 +361,35 @@ fn create_rejects_fee_configured_confidential_mint() {
     assert!(context.get_account(&f.accounts.swap_dvp).is_none());
 }
 
+/// Without auto-approval, only the CT authority can approve escrow B; with
+/// no authority, leg B could never be funded. Manual approval with an
+/// authority is covered by `manual_approval_blocks_funding_until_approved`.
+#[test]
+fn create_rejects_ct_mint_that_can_never_approve_escrow() {
+    for auto_approve in [false, true] {
+        let mut context = TestContext::new();
+        let f = ConfidentialDvpFixture::new(&mut context, true, false);
+        let account = token_2022_mint_account(
+            &mut context,
+            &[ExtensionType::ConfidentialTransferMint],
+            |mint| vec![ct_ix::initialize_mint(&TOKEN, mint, None, auto_approve, None).unwrap()],
+        );
+        context.svm.set_account(f.accounts.mint_b, account).unwrap();
+        if auto_approve {
+            f.create(&mut context);
+            continue;
+        }
+        assert_error(
+            &mut context,
+            &f.create_instructions(),
+            &[],
+            1,
+            InstructionError::Custom(Error::MintConfidentialApprovalImpossible as u32),
+        );
+        assert!(context.get_account(&f.accounts.swap_dvp).is_none());
+    }
+}
+
 /// Leg B mint built by the runtime with extensions in TLV order. `rate`
 /// adds TransferFeeConfig and the ConfidentialTransferFeeConfig it needs.
 fn set_leg_b_mint(
