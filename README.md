@@ -91,15 +91,15 @@ PDA seeds: `[b"dvp", settlement_authority, user_a, user_b, mint_a, mint_b, nonce
 
 ### Confidential instructions
 
-| #   | Name                   | Signer                                       | Effect                                                                         |
-| --- | ---------------------- | -------------------------------------------- | ------------------------------------------------------------------------------ |
-| 6   | CreateConfidentialDvp  | payer                                        | Creates the swap and configures escrow B for CT.                               |
-| 7   | ReclaimConfidentialDvp | `user_a` or `user_b`                         | Reclaims the signer's leg, keeping the swap open.                              |
-| 8   | SettleConfidentialDvp  | `settlement_authority`                       | Pays the bound amount, refunds available surplus and closes eligible accounts. |
-| 9   | CancelConfidentialDvp  | `settlement_authority`                       | Refunds the selected available B amount and public A, then closes the swap.    |
-| 10  | RejectConfidentialDvp  | `user_a` or `user_b`                         | Same refund path as Cancel, authorized by a party.                             |
-| 11  | RecoverConfidentialDvp | `user_b`                                     | Recovers leg B after close; leg A uses `RecoverDvp`.                           |
-| 12  | ApplyConfidentialDvp   | `user_a`, `user_b` or `settlement_authority` | Applies pending B credits before or after close.                               |
+| #   | Name                   | Signer                                                             | Effect                                                                         |
+| --- | ---------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| 6   | CreateConfidentialDvp  | payer                                                              | Creates the swap and configures escrow B for CT.                               |
+| 7   | ReclaimConfidentialDvp | `user_a` or `user_b`                                               | Reclaims the signer's leg, keeping the swap open.                              |
+| 8   | SettleConfidentialDvp  | `settlement_authority`                                             | Pays the bound amount, refunds available surplus and closes eligible accounts. |
+| 9   | CancelConfidentialDvp  | `settlement_authority`                                             | Refunds the selected available B amount and public A, then closes the swap.    |
+| 10  | RejectConfidentialDvp  | `user_a` or `user_b`                                               | Same refund path as Cancel, authorized by a party.                             |
+| 11  | RecoverConfidentialDvp | `user_b`                                                           | Recovers leg B after close; leg A uses `RecoverDvp`.                           |
+| 12  | ApplyConfidentialDvp   | `user_a`, `user_b` or `settlement_authority`; `user_b` after close | Applies pending B credits before or after close.                               |
 
 Funding remains an ordinary wallet token transfer. Confidential funding requires
 verified swap terms, a configured recipient escrow, and the shared seed.

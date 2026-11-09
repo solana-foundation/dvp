@@ -17,12 +17,13 @@ use pinocchio::{
 ///
 /// Moves the leg B escrow's pending confidential balance into its available
 /// balance through Token-2022 ApplyPendingBalance. Either depositor or the
-/// settlement authority may apply while the swap is open or after it closes.
-/// There is no public counterpart; the post-close PDA and tombstone checks
-/// follow [`process_recover_dvp`](super::recover_dvp::process_recover_dvp).
+/// settlement authority may apply while the swap is open; after it closes,
+/// only `user_b`, who alone recovers escrow B. There is no public
+/// counterpart; the post-close PDA and tombstone checks follow
+/// [`process_recover_dvp`](super::recover_dvp::process_recover_dvp).
 ///
 /// # Account Layout
-/// 0. `[signer]` signer - user_a, user_b or settlement_authority
+/// 0. `[signer]` signer - user_a, user_b or settlement_authority while open; user_b after close
 /// 1. `[]` swap_dvp - Open confidential swap or its closed PDA address
 /// 2. `[]` nonce_tombstone - Proves the swap existed after it closes
 /// 3. `[writable]` dvp_ata_b - PDA's canonical Token-2022 leg B escrow
@@ -97,10 +98,11 @@ pub fn process_apply_confidential_dvp(
             nonce_tombstone_info.owned_by(program_id),
             DvpSwapProgramError::DvpNeverCreated
         );
+        // Only user_b recovers escrow B after close. Another party applying
+        // a fresh credit would change the available ciphertext and
+        // invalidate user_b's prepared Recover proofs.
         require!(
-            signer_info.address() == &args.user_a
-                || signer_info.address() == &args.user_b
-                || signer_info.address() == &args.settlement_authority,
+            signer_info.address() == &args.user_b,
             DvpSwapProgramError::SignerNotParty
         );
     }
