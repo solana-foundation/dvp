@@ -2,19 +2,15 @@ use crate::{
     error::DvpSwapProgramError,
     processor::shared::account_check::{verify_account_owner, verify_signer, verify_token_program},
     processor::shared::confidential::has_confidential_transfer_account,
+    processor::shared::pda_utils::{SwapDvpPda, SwapDvpSeeds},
     processor::shared::token_utils::{
         get_mint_decimals, get_token_account_balance, transfer_checked_cpi,
         verify_ata_recipient_if_initialized, verify_canonical_ata,
     },
     require, require_len,
-    state::swap_dvp::{NONCE_TOMBSTONE_SEED, SWAP_DVP_SEED},
 };
 use pinocchio::{
-    account::AccountView,
-    address::Address,
-    cpi::{Seed, Signer},
-    error::ProgramError,
-    ProgramResult,
+    account::AccountView, address::Address, cpi::Signer, error::ProgramError, ProgramResult,
 };
 use pinocchio_token_2022::instructions::CloseAccount;
 
@@ -117,45 +113,20 @@ pub fn process_recover_dvp(
     );
     verify_token_program(token_program_info)?;
 
-    let nonce_bytes = args.nonce.to_le_bytes();
-    let (expected_swap_dvp, bump) = Address::find_program_address(
-        &[
-            SWAP_DVP_SEED,
-            args.settlement_authority.as_ref(),
-            args.user_a.as_ref(),
-            args.user_b.as_ref(),
-            args.mint_a.as_ref(),
-            args.mint_b.as_ref(),
-            &nonce_bytes,
-        ],
+    let pda = SwapDvpPda::derive(
         program_id,
-    );
-    require!(
-        swap_dvp_info.address() == &expected_swap_dvp,
-        ProgramError::InvalidSeeds
-    );
-
-    // Post-close only. A live SwapDvp is program-owned and ReclaimDvp
-    // applies there, validating against stored state instead.
-    require!(
-        swap_dvp_info.owned_by(&pinocchio_system::ID) && swap_dvp_info.is_data_empty(),
-        DvpSwapProgramError::DvpStillOpen
-    );
-
-    // The tombstone outlives the trade; it proves a DvP with exactly
-    // these seed inputs was once created by this program.
-    let (expected_tombstone, _) = Address::find_program_address(
-        &[NONCE_TOMBSTONE_SEED, expected_swap_dvp.as_ref()],
-        program_id,
-    );
-    require!(
-        nonce_tombstone_info.address() == &expected_tombstone,
-        ProgramError::InvalidAccountData
-    );
-    require!(
-        nonce_tombstone_info.owned_by(program_id),
-        DvpSwapProgramError::DvpNeverCreated
-    );
+        swap_dvp_info,
+        SwapDvpSeeds {
+            settlement_authority: &args.settlement_authority,
+            user_a: &args.user_a,
+            user_b: &args.user_b,
+            mint_a: &args.mint_a,
+            mint_b: &args.mint_b,
+            nonce: args.nonce,
+        },
+    )?;
+    // Post-close only; ReclaimDvp is the live-trade path.
+    pda.verify_closed(program_id, swap_dvp_info, nonce_tombstone_info)?;
 
     // dvp_escrow_ata: the dead PDA's canonical escrow for the leg's
     // mint, the only address the documented funding path deposits to.
@@ -189,17 +160,7 @@ pub fn process_recover_dvp(
     // can't deliver to the new owner. Matches Cancel/Reject/Settle.
     verify_ata_recipient_if_initialized(signer_dest_ata_info, signer_info.address(), leg_mint)?;
 
-    let bump_bytes = [bump];
-    let swap_dvp_seeds = [
-        Seed::from(SWAP_DVP_SEED),
-        Seed::from(args.settlement_authority.as_ref()),
-        Seed::from(args.user_a.as_ref()),
-        Seed::from(args.user_b.as_ref()),
-        Seed::from(args.mint_a.as_ref()),
-        Seed::from(args.mint_b.as_ref()),
-        Seed::from(nonce_bytes.as_ref()),
-        Seed::from(bump_bytes.as_ref()),
-    ];
+    let swap_dvp_seeds = pda.signer_seeds();
     let signer_seeds = [Signer::from(&swap_dvp_seeds)];
 
     // Errors with InvalidAccountOwner if the escrow was never recreated
