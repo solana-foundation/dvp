@@ -958,6 +958,48 @@ pub fn set_mint_2022_with_confidential_transfer_fee(
     write_account(context, mint, data, TOKEN_2022_PROGRAM_ID, 1_000_000_000);
 }
 
+/// Byte offset of the first mint TLV entry: the base mint padded to the
+/// account length, then the account type byte.
+pub const MINT_2022_FIRST_TLV_OFFSET: usize = Token2022Account::LEN + 1;
+
+/// Creates a Token-2022 mint through the runtime and returns its account.
+/// `init` runs before InitializeMint2, so the TLV entries keep its order.
+/// Callers copy the account over a fixture mint, whose address PDAs bind.
+pub fn token_2022_mint_account(
+    context: &mut TestContext,
+    extensions: &[ExtensionType],
+    init: impl FnOnce(&Address) -> Vec<Instruction>,
+) -> Account {
+    let mint = Keypair::new();
+    let space = ExtensionType::try_calculate_account_len::<Token2022Mint>(extensions).unwrap();
+    let mut instructions = vec![solana_system_interface::instruction::create_account(
+        &context.payer.pubkey(),
+        &mint.pubkey(),
+        context.svm.minimum_balance_for_rent_exemption(space),
+        space as u64,
+        &TOKEN_2022_PROGRAM_ID,
+    )];
+    instructions.extend(init(&mint.pubkey()));
+    instructions.push(
+        spl_token_2022_interface::instruction::initialize_mint2(
+            &TOKEN_2022_PROGRAM_ID,
+            &mint.pubkey(),
+            &context.payer.pubkey(),
+            None,
+            6,
+        )
+        .unwrap(),
+    );
+    let tx = Transaction::new_signed_with_payer(
+        &instructions,
+        Some(&context.payer.pubkey()),
+        &[&context.payer, &mint],
+        context.svm.latest_blockhash(),
+    );
+    context.svm.send_transaction(tx).unwrap();
+    context.get_account(&mint.pubkey()).unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

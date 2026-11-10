@@ -88,26 +88,17 @@ pub fn process_create_dvp(
     verify_token_program(token_program_a_info)?;
     verify_token_program(token_program_b_info)?;
     verify_ata_program(associated_token_program_info)?;
-    // settlement_authority receives the closed-account rent at Settle/Cancel.
-    // An executable account can't be credited lamports (ExecutableLamportChange),
-    // so reject it at creation rather than stranding funds until Reject/Reclaim.
-    require!(
-        !settlement_authority_info.executable(),
-        DvpSwapProgramError::SettlementAuthorityExecutable
-    );
-    // Each party must be a wallet-style identity so it can authorize the
-    // unwind paths (Reject/Reclaim/Recover) as a signer, either directly
-    // as a keypair or as a smart-wallet PDA via CPI. The settlement
-    // authority needs no such check: if it can't sign, the parties still
-    // recover their funds via Reject/Reclaim.
-    verify_party_signer_capable(user_a_info)?;
-    verify_party_signer_capable(user_b_info)?;
-    verify_account_owner(mint_a_info, token_program_a_info.address())?;
-    verify_account_owner(mint_b_info, token_program_b_info.address())?;
-    // New trades require both active and scheduled transfer-fee rates to be zero.
     let clock = Clock::get()?;
-    validate_mint_extensions(mint_a_info, clock.epoch, true)?;
-    validate_mint_extensions(mint_b_info, clock.epoch, true)?;
+    verify_create_accounts(
+        settlement_authority_info,
+        user_a_info,
+        user_b_info,
+        mint_a_info,
+        mint_b_info,
+        token_program_a_info,
+        token_program_b_info,
+        clock.epoch,
+    )?;
 
     let now = clock.unix_timestamp;
     validate_args(
@@ -442,30 +433,93 @@ fn validate_args(
     mint_b: &Address,
     now: i64,
 ) -> Result<(), ProgramError> {
-    require!(
-        args.expiry_timestamp > now,
-        DvpSwapProgramError::ExpiryNotInFuture
-    );
-    require!(
-        args.expiry_timestamp <= now.saturating_add(MAX_DVP_DURATION_SECS),
-        DvpSwapProgramError::ExpiryTooFarInFuture
-    );
-    if let Some(earliest) = args.earliest_settlement_timestamp {
-        require!(
-            earliest <= args.expiry_timestamp,
-            DvpSwapProgramError::EarliestAfterExpiry
-        );
-    }
-    require!(user_a != user_b, DvpSwapProgramError::SelfDvp);
-    require!(
-        settlement_authority != user_a && settlement_authority != user_b,
-        DvpSwapProgramError::SettlementAuthorityIsParty
-    );
-    require!(mint_a != mint_b, DvpSwapProgramError::SameMint);
+    validate_terms(
+        &CreateTerms {
+            expiry_timestamp: args.expiry_timestamp,
+            earliest_settlement_timestamp: args.earliest_settlement_timestamp,
+            settlement_authority,
+            user_a,
+            user_b,
+            mint_a,
+            mint_b,
+        },
+        now,
+    )?;
     require!(
         args.amount_a != 0 && args.amount_b != 0,
         DvpSwapProgramError::ZeroAmount
     );
+    Ok(())
+}
+
+/// Account checks shared by public and confidential Create. Mode-specific
+/// token program and mint checks stay with each handler.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn verify_create_accounts(
+    settlement_authority: &AccountView,
+    user_a: &AccountView,
+    user_b: &AccountView,
+    mint_a: &AccountView,
+    mint_b: &AccountView,
+    token_program_a: &AccountView,
+    token_program_b: &AccountView,
+    epoch: u64,
+) -> ProgramResult {
+    // settlement_authority receives the closed-account rent at Settle/Cancel.
+    // An executable account can't be credited lamports (ExecutableLamportChange),
+    // so reject it at creation rather than stranding funds until Reject/Reclaim.
+    require!(
+        !settlement_authority.executable(),
+        DvpSwapProgramError::SettlementAuthorityExecutable
+    );
+    // Each party must be a wallet-style identity so it can authorize the
+    // unwind paths (Reject/Reclaim/Recover) as a signer, either directly
+    // as a keypair or as a smart-wallet PDA via CPI. The settlement
+    // authority needs no such check: if it can't sign, the parties still
+    // recover their funds via Reject/Reclaim.
+    verify_party_signer_capable(user_a)?;
+    verify_party_signer_capable(user_b)?;
+    verify_account_owner(mint_a, token_program_a.address())?;
+    verify_account_owner(mint_b, token_program_b.address())?;
+    // New trades require both active and scheduled transfer-fee rates to be zero.
+    validate_mint_extensions(mint_a, epoch, true)?;
+    validate_mint_extensions(mint_b, epoch, true)
+}
+
+/// Swap terms shared by public and confidential Create.
+pub(super) struct CreateTerms<'a> {
+    pub expiry_timestamp: i64,
+    pub earliest_settlement_timestamp: Option<i64>,
+    pub settlement_authority: &'a Address,
+    pub user_a: &'a Address,
+    pub user_b: &'a Address,
+    pub mint_a: &'a Address,
+    pub mint_b: &'a Address,
+}
+
+/// Expiry, party and mint checks shared by public and confidential Create.
+/// Amount checks stay with each mode.
+pub(super) fn validate_terms(terms: &CreateTerms, now: i64) -> ProgramResult {
+    require!(
+        terms.expiry_timestamp > now,
+        DvpSwapProgramError::ExpiryNotInFuture
+    );
+    require!(
+        terms.expiry_timestamp <= now.saturating_add(MAX_DVP_DURATION_SECS),
+        DvpSwapProgramError::ExpiryTooFarInFuture
+    );
+    if let Some(earliest) = terms.earliest_settlement_timestamp {
+        require!(
+            earliest <= terms.expiry_timestamp,
+            DvpSwapProgramError::EarliestAfterExpiry
+        );
+    }
+    require!(terms.user_a != terms.user_b, DvpSwapProgramError::SelfDvp);
+    require!(
+        terms.settlement_authority != terms.user_a && terms.settlement_authority != terms.user_b,
+        DvpSwapProgramError::SettlementAuthorityIsParty
+    );
+    require!(terms.mint_a != terms.mint_b, DvpSwapProgramError::SameMint);
     Ok(())
 }
 

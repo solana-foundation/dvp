@@ -15,11 +15,13 @@ use pinocchio_token_2022::{
     instructions::SyncNative, state::Mint as Token2022Mint,
     state::TokenAccount as Token2022Account, ID as TOKEN_2022_PROGRAM_ID,
 };
-use spl_token_2022::extension::{
-    memo_transfer::memo_required, non_transferable::NonTransferable,
-    transfer_fee::TransferFeeConfig, BaseStateWithExtensions, StateWithExtensions,
+use spl_token_2022_interface::extension::{
+    memo_transfer::memo_required, transfer_fee::TransferFeeConfig, BaseStateWithExtensions,
+    ExtensionType, StateWithExtensions,
 };
-use spl_token_2022::state::{Account as Token2022AccountState, Mint as Token2022MintState};
+use spl_token_2022_interface::state::{
+    Account as Token2022AccountState, Mint as Token2022MintState,
+};
 
 use crate::{error::DvpSwapProgramError, require};
 
@@ -314,6 +316,11 @@ pub fn get_mint_authority(mint_info: &AccountView) -> Result<Option<Address>, Pr
 /// they agree to transact in; mint-authority trust is not a problem the
 /// program can solve.
 ///
+/// A mint whose TLV list doesn't fully parse is rejected, including one
+/// with an extension type this program's Token-2022 parser doesn't know.
+/// Token-2022 initializes mint extensions only before `InitializeMint`, so
+/// this doesn't change Settle for mints accepted at Create.
+///
 /// Called at CreateDvp and SettleDvp. Recovery instructions skip this check:
 /// refunds can incur fees after a rate increase. If an escrow holds withheld
 /// fees, clients must prepend HarvestWithheldTokensToMint before an instruction
@@ -339,12 +346,21 @@ pub fn validate_mint_extensions(
     let data = mint_info.try_borrow()?;
     let mint = StateWithExtensions::<Token2022MintState>::unpack(&data)
         .map_err(|_| ProgramError::InvalidAccountData)?;
+    // Parse the whole TLV list first. A lookup stops at an entry it can't
+    // parse, such as an unknown extension type, and would miss a blocked
+    // extension after it.
+    let types = mint
+        .get_extension_types()
+        .map_err(|_| ProgramError::InvalidAccountData)?;
 
-    if mint.get_extension::<NonTransferable>().is_ok() {
+    if types.contains(&ExtensionType::NonTransferable) {
         return Err(DvpSwapProgramError::BlockedMintExtension.into());
     }
 
-    if let Ok(config) = mint.get_extension::<TransferFeeConfig>() {
+    if types.contains(&ExtensionType::TransferFeeConfig) {
+        let config = mint
+            .get_extension::<TransferFeeConfig>()
+            .map_err(|_| ProgramError::InvalidAccountData)?;
         let active_rate = u16::from(config.get_epoch_fee(epoch).transfer_fee_basis_points);
         // Once newer_transfer_fee is active, older_transfer_fee is historical.
         // Only Create rejects a future increase; Settle can finish at zero rate

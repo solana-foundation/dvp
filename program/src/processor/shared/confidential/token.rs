@@ -2,10 +2,9 @@
 
 use pinocchio::{account::AccountView, error::ProgramError, ProgramResult};
 use pinocchio_token_2022::ID as TOKEN_2022_PROGRAM_ID;
-use spl_token_2022::{
+use spl_token_2022_interface::{
     extension::{
         confidential_transfer::{ConfidentialTransferAccount, ConfidentialTransferMint},
-        transfer_fee::TransferFeeConfig,
         BaseStateWithExtensions, ExtensionType, StateWithExtensions,
     },
     state::{Account, Mint},
@@ -88,6 +87,25 @@ pub fn verify_confidential_mint(mint: &AccountView) -> ProgramResult {
     Ok(())
 }
 
+/// Create-only: without auto-approval only the confidential transfer
+/// authority can approve escrow B. With no authority, leg B could never be
+/// funded. Settle does not repeat this: its escrow is already approved.
+/// Call after [`verify_confidential_mint`].
+#[inline(always)]
+pub fn verify_confidential_escrow_approvable(mint: &AccountView) -> ProgramResult {
+    let data = mint.try_borrow()?;
+    let state =
+        StateWithExtensions::<Mint>::unpack(&data).map_err(|_| ProgramError::InvalidAccountData)?;
+    let config = state
+        .get_extension::<ConfidentialTransferMint>()
+        .map_err(|_| DvpSwapProgramError::MintNotConfidential)?;
+    require!(
+        bool::from(config.auto_approve_new_accounts) || config.authority.as_ref().is_some(),
+        DvpSwapProgramError::MintConfidentialApprovalImpossible
+    );
+    Ok(())
+}
+
 /// Leg B rejects TransferFeeConfig at any rate: confidential transfers on fee
 /// mints need fee proofs, which Settle doesn't build.
 #[inline(always)]
@@ -95,8 +113,12 @@ pub fn verify_no_transfer_fee(mint: &AccountView) -> ProgramResult {
     let data = mint.try_borrow()?;
     let state =
         StateWithExtensions::<Mint>::unpack(&data).map_err(|_| ProgramError::InvalidAccountData)?;
+    // Parse the entire TLV list so an unparsable entry can't hide the fee config.
+    let types = state
+        .get_extension_types()
+        .map_err(|_| ProgramError::InvalidAccountData)?;
     require!(
-        state.get_extension::<TransferFeeConfig>().is_err(),
+        !types.contains(&ExtensionType::TransferFeeConfig),
         DvpSwapProgramError::BlockedMintExtension
     );
     Ok(())

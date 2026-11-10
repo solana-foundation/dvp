@@ -32,7 +32,7 @@ Preserved properties: atomic Settle; the Settle payment equals the agreed amount
 
 The cap applies to one transfer, not to escrow B's balance: a larger balance, for example after several credits, is refunded in several `Partial` steps (7.2).
 
-**Manual-approval mints.** On a `mint_b` with `auto_approve_new_accounts = false`, escrow B must be approved by the mint's CT authority before it can be funded (7.3).
+**Manual-approval mints.** On a `mint_b` with `auto_approve_new_accounts = false`, escrow B must be approved by the mint's CT authority before it can be funded (7.3). Such a mint without a CT authority is rejected at Create, since escrow B could never be approved.
 
 ## 3. Principle
 
@@ -353,7 +353,7 @@ Accounts:
 
 Steps, after all CreateDvp checks (`ZeroAmount` applies to `amount_a` only):
 
-1. `mint_b` is owned by Token-2022 and has `ConfidentialTransferMint`, else `MintNotConfidential`. `TransferHook` is allowed (section 8); confidential transfer fees are rejected, as TransferFee is today.
+1. `mint_b` is owned by Token-2022 and has `ConfidentialTransferMint`, else `MintNotConfidential`. With `auto_approve_new_accounts = false` the mint must have a CT authority, else `MintConfidentialApprovalImpossible`. `TransferHook` is allowed (section 8); confidential transfer fees are rejected, as TransferFee is today.
 2. Create the escrow B ATA and run `verify_escrow_not_preloaded` before `Reallocate`, since it compares lamports with the rent of the current size.
 3. Escrow B's public `amount == 0`, else `EscrowPublicBalanceNotEmpty`. Its address is predictable, so it could hold someone else's public tokens before Create. Those are recovered through a public swap on the same seeds (`CreateDvp`, then Reclaim); the confidential swap uses another nonce.
 4. PDA signs: `Reallocate` (adds `ConfidentialTransferAccount`, payer funds) → `ConfigureAccount` (`decryptable_zero_balance`, `maximum_pending_balance_credit_counter = 65536`, PubkeyValidity read through the instructions sysvar) → `DisableNonConfidentialCredits`.
@@ -503,7 +503,7 @@ Steps:
 
 ### 7.8 ApplyConfidentialDvp
 
-Discriminator 12. Moves escrow B's pending balance into available, while the swap is open or after close. No public counterpart.
+Discriminator 12. Moves escrow B's pending balance into available, while the swap is open or after close. No public counterpart. After close only `user_b` may Apply: it alone recovers escrow B, and an Apply by another party would change the available ciphertext and invalidate `user_b`'s prepared Recover proofs.
 
 Data:
 
@@ -527,7 +527,7 @@ Accounts:
 Steps:
 
 1. Re-derive the `SwapDvp` PDA from the seed inputs; `swap_dvp` must be at that address.
-2. Swap open (program-owned): `ConfidentialSwapDvp::load`; signer is `user_a`, `user_b` or `settlement_authority` of the stored state. Swap closed: the tombstone must exist, as in RecoverDvp; signer is one of the seed-input parties.
+2. Swap open (program-owned): `ConfidentialSwapDvp::load`; signer is `user_a`, `user_b` or `settlement_authority` of the stored state. Swap closed: the tombstone must exist, as in RecoverDvp; signer is the seed-input `user_b`, else `SignerNotParty`.
 3. `dvp_ata_b` is the canonical ATA of the PDA for the seed input `mint_b` and has `ConfidentialTransferAccount`, else `EscrowNotConfidential`.
 4. CPI `ApplyPendingBalance` with the given data, PDA signs. The program does not read or check the decryptable balance.
 
@@ -559,7 +559,7 @@ Hook programs that read or limit the amount see `u64::MAX` and may reject. The b
 
 ## 9. Errors
 
-Confidential error codes are 24-36, in the table order below. Codes 0-23 retain the source baseline ABI at `df9919e`; compare against the deployed mainnet release before upgrading.
+Confidential error codes are 24-37, in the table order below. Codes 0-23 retain the source baseline ABI at `df9919e`; compare against the deployed mainnet release before upgrading.
 
 | Error                                  | When                                                                                                          |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
@@ -576,6 +576,7 @@ Confidential error codes are 24-36, in the table order below. Codes 0-23 retain 
 | `RecipientPendingCounterFull`          | Recipient pending counter at maximum                                                                          |
 | `EscrowBalanceNotZero`                 | Settle and `Full` refunds: the zero context does not match the escrow's available balance after the transfers |
 | `LegBRefundRequired`                   | Leg B branch of Reclaim, Cancel, Reject, Recover: `leg_b_refund = None` while available is not all-zero bytes |
+| `MintConfidentialApprovalImpossible`   | CreateConfidentialDvp: `mint_b` requires manual approval but has no CT authority                              |
 
 ## 10. Security invariants
 
@@ -583,7 +584,7 @@ Confidential error codes are 24-36, in the table order below. Codes 0-23 retain 
 2. A confidential Settle transfers to the seller exactly the amount encrypted at Create: binding per section 6 plus Token-2022's own proof checks.
 3. After a confidential Settle or a `Full` refund the escrow's available balance is proven zero by a ZeroCiphertext context the program checks itself; no surplus is left behind. A `Partial` refund moves funds only to `user_b`'s canonical ATA.
 4. Every context account is owned by the ZK program, of exact length and type, its authority is the signer, and closed in the same instruction.
-5. No terminal instruction applies pending; a credit to the escrow's pending balance, from anyone, cannot invalidate prepared proofs or block Settle and refunds. Only parties can Apply.
+5. No terminal instruction applies pending; a credit to the escrow's pending balance, from anyone, cannot invalidate prepared proofs or block Settle and refunds. Only parties can Apply, and after close only `user_b`, so nobody else can invalidate prepared Recover proofs.
 6. Each party can authorize refund of its leg without the other parties, as in the public mode, given the seed. Execution still depends on the mint's restrictions, including its hook and freeze state, and a ready destination account.
 7. Public and confidential instructions never operate on the other mode's swap (5.1); the mode comes from on-chain state.
 8. Public instructions preserve the source baseline ABI. Execution against historical deployed accounts remains a release validation requirement (section 11).
@@ -593,7 +594,7 @@ Known limitations, not prevented by the program:
 
 - `Partial` proves a valid transfer, not a positive amount or exhaustion of available funds. In particular, valid `Partial(0)` proofs can close the swap through Cancel or Reject while leaving all available B in escrow. Only `user_b` can recover the remainder, bearing the cost of fresh proofs and Recover transactions (7.7). This cannot redirect B to another recipient.
 - A hook authority or changed hook behavior can block CT transfers after successful funding, including Reclaim and Recover of leg B (section 8). Atomic rollback protects balances but does not guarantee eventual recovery. Preparatory proof contexts from earlier transactions remain open after a failed final transaction and require separate cleanup by their authority.
-- A party can invalidate prepared Settle proofs by calling Apply after a pending credit; the proofs are rebuilt. The same party could abort the swap with Reject anyway.
+- While the swap is open, a party can invalidate prepared Settle or leg B refund proofs by calling Apply after a pending credit; the proofs are rebuilt. The same party could abort the swap with Reject anyway, and Reject or Cancel still returns leg B to `user_b`. After close only `user_b` can Apply.
 - Metadata stays public: which instruction was used, account sizes and counts, whether there was a surplus, timing.
 - The mint auditor, if configured, sees all amounts. An auditor key substituted or added through a forged mint snapshot would also receive a decryption handle for every proof built from it, for the same reason as the recipient keys below. Both clients bind the mint snapshot to `mint_b` and accept the expected auditor as optional input, refusing to build any proof on a mismatch; without it the mint snapshot is trusted.
 - Confidentiality of the Settle and refund amounts assumes authentic recipient ElGamal keys. This follows from Token-2022 confidential transfers, not from DvP: every sender reads the recipient's key from account state served by an RPC, and neither Token-2022 nor the ZK ElGamal proof program binds a proof to the intended recipient before the proof is published. A failed final transaction still leaves its preparation proofs on chain, so DvP cannot close this on chain. Recipient keys belong to the recipients' own token accounts and cannot be derived from the shared seed. Both clients bind each recipient snapshot to the instruction's destination, Token-2022 and `mint_b`, and accept the expected recipient keys as optional input, refusing to build any proof on a mismatch. The party building Settle or refund proofs must either supply expected keys, for example from the trade agreement, or read account state from an RPC it trusts.
@@ -694,21 +695,23 @@ Confidential flows:
 
 Negative cases:
 
-| Case                                                                               | Expected                           |
-| ---------------------------------------------------------------------------------- | ---------------------------------- |
-| Amount substitution                                                                | `ConfidentialAmountBMismatch`      |
-| Foreign key in an equality context                                                 | `ConfidentialAmountBMismatch`      |
-| Equality bound to a different validity context                                     | `ConfidentialAmountBMismatch`      |
-| Foreign context authority                                                          | `ProofContextAuthorityMismatch`    |
-| Wrong context length or type                                                       | `InvalidProofContext`              |
-| `Option` or `LegBRefund` mode and placeholders disagree                            | `InvalidInstructionData`           |
-| `Full` that leaves available non-zero                                              | `EscrowBalanceNotZero`             |
-| Zero context does not match the escrow balance                                     | `EscrowBalanceNotZero`             |
-| `leg_b_refund = None` while leg B is funded                                        | `LegBRefundRequired`               |
-| `mint_b` without CT                                                                | `MintNotConfidential`              |
-| Recipient not ready, each check (including a manual-approval mint without approve) | the matching `Recipient*` error    |
-| Public balance in escrow B before Create                                           | `EscrowPublicBalanceNotEmpty`      |
-| `amount_b >= 2^48`                                                                 | rejected by the client check (4.4) |
+| Case                                                                               | Expected                             |
+| ---------------------------------------------------------------------------------- | ------------------------------------ |
+| Amount substitution                                                                | `ConfidentialAmountBMismatch`        |
+| Foreign key in an equality context                                                 | `ConfidentialAmountBMismatch`        |
+| Equality bound to a different validity context                                     | `ConfidentialAmountBMismatch`        |
+| Foreign context authority                                                          | `ProofContextAuthorityMismatch`      |
+| Wrong context length or type                                                       | `InvalidProofContext`                |
+| `Option` or `LegBRefund` mode and placeholders disagree                            | `InvalidInstructionData`             |
+| `Full` that leaves available non-zero                                              | `EscrowBalanceNotZero`               |
+| Zero context does not match the escrow balance                                     | `EscrowBalanceNotZero`               |
+| `leg_b_refund = None` while leg B is funded                                        | `LegBRefundRequired`                 |
+| `mint_b` without CT                                                                | `MintNotConfidential`                |
+| `mint_b` with manual approval and no CT authority                                  | `MintConfidentialApprovalImpossible` |
+| Apply after close by `user_a` or `settlement_authority`                            | `SignerNotParty`                     |
+| Recipient not ready, each check (including a manual-approval mint without approve) | the matching `Recipient*` error      |
+| Public balance in escrow B before Create                                           | `EscrowPublicBalanceNotEmpty`        |
+| `amount_b >= 2^48`                                                                 | rejected by the client check (4.4)   |
 
 Mode separation: instructions 1-4 on a confidential swap, RecoverDvp on a CT escrow, and 7-10 or 12 on an open public swap fail with `SwapModeMismatch`; RecoverConfidentialDvp and Apply on a public escrow of a closed swap fail with `EscrowNotConfidential`. Nothing changes in either case. RecoverDvp still recovers leg A of a closed confidential swap.
 

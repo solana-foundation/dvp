@@ -2,19 +2,20 @@ extern crate alloc;
 
 use crate::{
     error::DvpSwapProgramError,
-    processor::create_dvp::{verify_party_signer_capable, MAX_DVP_DURATION_SECS},
+    processor::create_dvp::{validate_terms, verify_create_accounts, CreateTerms},
     processor::shared::account_check::{
-        verify_account_owner, verify_ata_program, verify_signer, verify_system_account,
-        verify_system_program, verify_token_program,
+        verify_ata_program, verify_signer, verify_system_account, verify_system_program,
+        verify_token_program,
     },
     processor::shared::confidential::{
         configure_confidential_account_cpi, disable_non_confidential_credits_cpi,
-        reallocate_confidential_account_cpi, verify_confidential_mint, verify_no_transfer_fee,
+        reallocate_confidential_account_cpi, verify_confidential_escrow_approvable,
+        verify_confidential_mint, verify_no_transfer_fee,
     },
     processor::shared::pda_utils::create_pda_account,
     processor::shared::token_utils::{
-        get_mint_authority, get_token_account_balance, validate_mint_extensions,
-        verify_canonical_ata, verify_escrow_not_preloaded,
+        get_mint_authority, get_token_account_balance, verify_canonical_ata,
+        verify_escrow_not_preloaded,
     },
     require, require_len,
     state::swap_dvp::{
@@ -70,31 +71,24 @@ pub fn process_create_confidential_dvp(
         DvpSwapProgramError::MintNotConfidential
     );
     verify_confidential_mint(mint_b_info)?;
+    verify_confidential_escrow_approvable(mint_b_info)?;
     verify_no_transfer_fee(mint_b_info)?;
     verify_ata_program(associated_token_program_info)?;
     require!(
         instructions_sysvar_info.address() == &pinocchio::sysvars::instructions::INSTRUCTIONS_ID,
         ProgramError::UnsupportedSysvar
     );
-    // settlement_authority receives the closed-account rent at Settle/Cancel.
-    // An executable account can't be credited lamports (ExecutableLamportChange),
-    // so reject it at creation rather than stranding funds until Reject/Reclaim.
-    require!(
-        !settlement_authority_info.executable(),
-        DvpSwapProgramError::SettlementAuthorityExecutable
-    );
-    // Each party must be a wallet-style identity so it can authorize the
-    // unwind paths (Reject/Reclaim/Recover) as a signer, either directly
-    // as a keypair or as a smart-wallet PDA via CPI. The settlement
-    // authority needs no such check: if it can't sign, the parties still
-    // recover their funds via Reject/Reclaim.
-    verify_party_signer_capable(user_a_info)?;
-    verify_party_signer_capable(user_b_info)?;
-    verify_account_owner(mint_a_info, token_program_a_info.address())?;
-    verify_account_owner(mint_b_info, token_program_b_info.address())?;
     let clock = Clock::get()?;
-    validate_mint_extensions(mint_a_info, clock.epoch, true)?;
-    validate_mint_extensions(mint_b_info, clock.epoch, true)?;
+    verify_create_accounts(
+        settlement_authority_info,
+        user_a_info,
+        user_b_info,
+        mint_a_info,
+        mint_b_info,
+        token_program_a_info,
+        token_program_b_info,
+        clock.epoch,
+    )?;
 
     let now = clock.unix_timestamp;
     validate_args(
@@ -452,26 +446,19 @@ fn validate_args(
     mint_b: &Address,
     now: i64,
 ) -> Result<(), ProgramError> {
-    require!(
-        args.expiry_timestamp > now,
-        DvpSwapProgramError::ExpiryNotInFuture
-    );
-    require!(
-        args.expiry_timestamp <= now.saturating_add(MAX_DVP_DURATION_SECS),
-        DvpSwapProgramError::ExpiryTooFarInFuture
-    );
-    if let Some(earliest) = args.earliest_settlement_timestamp {
-        require!(
-            earliest <= args.expiry_timestamp,
-            DvpSwapProgramError::EarliestAfterExpiry
-        );
-    }
-    require!(user_a != user_b, DvpSwapProgramError::SelfDvp);
-    require!(
-        settlement_authority != user_a && settlement_authority != user_b,
-        DvpSwapProgramError::SettlementAuthorityIsParty
-    );
-    require!(mint_a != mint_b, DvpSwapProgramError::SameMint);
+    validate_terms(
+        &CreateTerms {
+            expiry_timestamp: args.expiry_timestamp,
+            earliest_settlement_timestamp: args.earliest_settlement_timestamp,
+            settlement_authority,
+            user_a,
+            user_b,
+            mint_a,
+            mint_b,
+        },
+        now,
+    )?;
+    // Leg B's amount is encrypted; its binding is checked at Settle.
     require!(args.amount_a != 0, DvpSwapProgramError::ZeroAmount);
     Ok(())
 }
@@ -480,6 +467,7 @@ fn validate_args(
 mod tests {
     extern crate alloc;
     use super::*;
+    use crate::processor::create_dvp::MAX_DVP_DURATION_SECS;
 
     const PROOF_OFFSET: usize = 8 * 3 + 64 * 2 + 36;
     const OPTIONS_OFFSET: usize = PROOF_OFFSET + 1;

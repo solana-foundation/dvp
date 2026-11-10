@@ -10,7 +10,7 @@ use pinocchio::{
     Address, ProgramResult,
 };
 use pinocchio_token_2022::ID as TOKEN_2022_PROGRAM_ID;
-use spl_token_2022::{
+use spl_token_2022_interface::{
     extension::{
         confidential_transfer::instruction::{
             ApplyPendingBalanceData, ConfidentialTransferInstruction,
@@ -18,7 +18,7 @@ use spl_token_2022::{
         },
         ExtensionType,
     },
-    solana_zk_sdk::zk_elgamal_proof_program::instruction::ProofInstruction,
+    solana_zk_elgamal_proof_interface::instruction::ProofInstruction,
 };
 
 use super::{

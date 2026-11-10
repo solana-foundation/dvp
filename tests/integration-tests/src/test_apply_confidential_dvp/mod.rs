@@ -1,7 +1,8 @@
 //! ApplyConfidentialDvp while open and after a fixture-modeled close.
 use crate::{
     confidential_utils::{
-        assert_error, create_wallet_account, pending, prepare_funding_transfer, send_v1, state,
+        assert_contexts_closed, assert_error, available, create_wallet_account, fund_late_b,
+        pending, prepare_funding_transfer, prepare_refund, recover, send_v1, setup_refund, state,
         ConfidentialDvpFixture, Keys,
     },
     state_utils::AMOUNT_B,
@@ -18,7 +19,7 @@ use solana_keypair::Keypair;
 use solana_signer::Signer;
 
 #[test]
-fn funding_and_apply_by_each_party_open_and_after_close() {
+fn funding_and_apply_by_each_party_while_open_and_by_user_b_after_close() {
     let mut context = TestContext::new();
     let f = ConfidentialDvpFixture::new(&mut context, true, false);
     f.create(&mut context);
@@ -29,7 +30,12 @@ fn funding_and_apply_by_each_party_open_and_after_close() {
         if closed {
             f.close_fixture(&mut context);
         }
-        for signer in [&f.user_a, &f.user_b, &f.authority] {
+        let signers: &[&Keypair] = if closed {
+            &[&f.user_b]
+        } else {
+            &[&f.user_a, &f.user_b, &f.authority]
+        };
+        for signer in signers {
             let funding = prepare_funding_transfer(
                 &mut context,
                 &f.accounts.mint_b,
@@ -45,7 +51,7 @@ fn funding_and_apply_by_each_party_open_and_after_close() {
             assert_eq!(pending(&context, &f.accounts.dvp_ata_b, &f.keys), AMOUNT_B);
             available += AMOUNT_B;
             let ix = f.apply(signer.pubkey(), available).instruction();
-            send_v1(&mut context, &[ix], &[signer]).unwrap();
+            send_v1(&mut context, &[ix], &[*signer]).unwrap();
             let ct = state(&context, &f.accounts.dvp_ata_b);
             assert_eq!(pending(&context, &f.accounts.dvp_ata_b, &f.keys), 0);
             assert_eq!(u64::from(ct.pending_balance_credit_counter), 0);
@@ -66,6 +72,40 @@ fn funding_and_apply_by_each_party_open_and_after_close() {
 }
 
 #[test]
+fn only_user_b_applies_after_close_so_recovery_proofs_stay_valid() {
+    let mut context = TestContext::new();
+    let (f, keys) = setup_refund(&mut context, 0, AMOUNT_B, false);
+    f.close_fixture(&mut context);
+    let refund = prepare_refund(
+        &mut context,
+        &f,
+        &keys,
+        f.user_b.pubkey(),
+        AMOUNT_B,
+        AMOUNT_B,
+        true,
+    );
+    // Anyone can add a randomized zero credit; without Apply it stays pending.
+    fund_late_b(&mut context, &f, 0);
+    let before = context.get_account(&f.accounts.dvp_ata_b);
+    for signer in [&f.user_a, &f.authority] {
+        let mut apply = f.apply(signer.pubkey(), AMOUNT_B);
+        apply.expected_pending_balance_credit_counter(2);
+        assert_error(
+            &mut context,
+            &[apply.instruction()],
+            &[signer],
+            0,
+            InstructionError::Custom(Error::SignerNotParty as u32),
+        );
+    }
+    assert_eq!(context.get_account(&f.accounts.dvp_ata_b), before);
+    send_v1(&mut context, &[recover(&f, &refund, &[])], &[&f.user_b]).unwrap();
+    assert_contexts_closed(&context, &refund);
+    assert_eq!(available(&context, &f), 0);
+}
+
+#[test]
 fn apply_checks_signer_seeds_ata_program_and_tombstone() {
     let mut context = TestContext::new();
     let f = ConfidentialDvpFixture::new(&mut context, true, false);
@@ -76,6 +116,7 @@ fn apply_checks_signer_seeds_ata_program_and_tombstone() {
         if closed {
             f.close_fixture(&mut context);
         }
+        let party = if closed { &f.user_b } else { &f.user_a };
         for (index, address, expected) in [
             (1, Address::new_unique(), InstructionError::InvalidSeeds),
             (
@@ -86,9 +127,9 @@ fn apply_checks_signer_seeds_ata_program_and_tombstone() {
             (3, f.accounts.dvp_ata_a, InstructionError::InvalidSeeds),
             (4, TOKEN_PROGRAM_ID, InstructionError::IncorrectProgramId),
         ] {
-            let mut ix = f.apply(f.user_a.pubkey(), 0).instruction();
+            let mut ix = f.apply(party.pubkey(), 0).instruction();
             ix.accounts[index].pubkey = address;
-            assert_error(&mut context, &[ix], &[&f.user_a], 0, expected);
+            assert_error(&mut context, &[ix], &[party], 0, expected);
         }
         let mut missing_signer = f.apply(stranger.pubkey(), 0).instruction();
         missing_signer.accounts[0].is_signer = false;
@@ -106,12 +147,12 @@ fn apply_checks_signer_seeds_ata_program_and_tombstone() {
             0,
             InstructionError::Custom(Error::SignerNotParty as u32),
         );
-        let mut wrong_seeds = f.apply(f.user_a.pubkey(), 0);
+        let mut wrong_seeds = f.apply(party.pubkey(), 0);
         wrong_seeds.nonce(43);
         assert_error(
             &mut context,
             &[wrong_seeds.instruction()],
-            &[&f.user_a],
+            &[party],
             0,
             InstructionError::InvalidSeeds,
         );
@@ -123,8 +164,8 @@ fn apply_checks_signer_seeds_ata_program_and_tombstone() {
         .unwrap();
     assert_error(
         &mut context,
-        &[f.apply(f.user_a.pubkey(), 0).instruction()],
-        &[&f.user_a],
+        &[f.apply(f.user_b.pubkey(), 0).instruction()],
+        &[&f.user_b],
         0,
         InstructionError::Custom(Error::DvpNeverCreated as u32),
     );
@@ -181,8 +222,8 @@ fn apply_rejects_public_mode_and_forwards_unchecked_balance_metadata() {
     );
     assert_error(
         &mut context,
-        &[f.apply(f.user_a.pubkey(), 0).instruction()],
-        &[&f.user_a],
+        &[f.apply(f.user_b.pubkey(), 0).instruction()],
+        &[&f.user_b],
         0,
         InstructionError::Custom(Error::EscrowNotConfidential as u32),
     );

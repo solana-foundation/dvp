@@ -8,6 +8,9 @@
 //!   single-program-T22 and mixed (legacy ↔ T22) topologies are exercised.
 //! - **CreateDvp negative** for every *blocked* extension on either leg
 //!   (non-zero TransferFeeConfig, NonTransferable).
+//! - **Extension parsing**: `PermissionedBurn` before a blocked extension,
+//!   an unknown extension type, and a `PermissionedBurn` lifecycle are
+//!   covered in `permissioned_burn`.
 //! - **Transfer fees**: zero-rate lifecycle, scheduled rate changes and
 //!   recovery with external harvest are covered in `transfer_fee`.
 //! - **Owner mismatch**: legacy SPL mint paired with T22 token program.
@@ -17,6 +20,7 @@
 //! - **Post-Create cross-program recreation**: a mint is recreated under
 //!   the other token program after CreateDvp; Settle must reject it.
 
+mod permissioned_burn;
 mod transfer_fee;
 
 use dvp_swap_program_client::instructions::{
