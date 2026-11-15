@@ -27,7 +27,7 @@ jobs:
           enable-rust-cache: "false"
           install-solana: "false"
           install-just: "false"
-      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
+      - uses: taiki-e/install-action@645d1ab48b3cb8591684a8b730b2ccf4cb3f9568 # v2.87.33
         with:
           tool: cargo-audit
 
@@ -51,7 +51,7 @@ jobs:
       - name: Format files pnpm rewrote
         run: pnpm exec prettier --write --no-error-on-unmatched-pattern pnpm-workspace.yaml package.json
 
-      - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+      - uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8.1.2
         with:
           branch: fix/audit-advisories
           delete-branch: true
