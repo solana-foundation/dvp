@@ -7,8 +7,10 @@
 //!   plain T22 with no extensions). Both single-program-T22 and mixed
 //!   (legacy ↔ T22) topologies are exercised.
 //! - **CreateDvp negative** for every *blocked* extension on either leg
-//!   (TransferFeeConfig, InterestBearingConfig, ScaledUiAmount,
+//!   (non-zero TransferFeeConfig, InterestBearingConfig, ScaledUiAmount,
 //!   NonTransferable).
+//! - **Transfer fees**: zero-rate lifecycle, scheduled rate changes and
+//!   recovery with external harvest are covered in `transfer_fee`.
 //! - **Owner mismatch**: legacy SPL mint paired with T22 token program.
 //! - **Post-Create extension activation**: a mint is swapped to a
 //!   blocked-extension layout *after* CreateDvp, and Settle/Reject must
@@ -16,6 +18,8 @@
 //!   extension check so funds can never get stranded).
 //! - **Post-Create cross-program recreation**: a mint is recreated under
 //!   the other token program after CreateDvp; Settle must reject it.
+
+mod transfer_fee;
 
 use dvp_swap_program_client::instructions::{
     CancelDvpBuilder, CreateDvpBuilder, ReclaimDvpBuilder, RecoverDvpBuilder, RejectDvpBuilder,

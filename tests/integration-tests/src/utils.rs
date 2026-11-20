@@ -789,7 +789,7 @@ pub fn malicious_hook_extras(
     ]
 }
 
-/// TransferFeeConfig — a blocked extension; used in negative tests.
+/// TransferFeeConfig with the same initial rate in both schedule entries.
 pub fn set_mint_2022_with_transfer_fee(
     context: &mut TestContext,
     mint: &Address,
