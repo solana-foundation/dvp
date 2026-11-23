@@ -3,6 +3,7 @@ use dvp_swap_program_client::instructions::{
 };
 use litesvm::types::TransactionMetadata;
 use solana_address::Address;
+use solana_instruction::Instruction;
 use solana_keypair::Keypair;
 use solana_signer::Signer;
 use spl_token_2022_interface::instruction::transfer_checked;
@@ -202,7 +203,13 @@ pub fn assert_fund_b(context: &mut TestContext, fixture: &DvpFixture) -> Transac
 }
 
 pub fn assert_reclaim_a(context: &mut TestContext, fixture: &DvpFixture) -> TransactionMetadata {
-    let ix = ReclaimDvpBuilder::new()
+    context
+        .send(reclaim_a_ix(fixture), &[&fixture.user_a])
+        .expect("ReclaimDvp A")
+}
+
+pub fn reclaim_a_ix(fixture: &DvpFixture) -> Instruction {
+    ReclaimDvpBuilder::new()
         .signer(fixture.user_a.pubkey())
         .swap_dvp(fixture.swap_dvp)
         .mint(fixture.mint_a)
@@ -210,12 +217,17 @@ pub fn assert_reclaim_a(context: &mut TestContext, fixture: &DvpFixture) -> Tran
         .signer_dest_ata(fixture.user_a_ata_a)
         .token_program(fixture.token_program_a)
         .memo_program(MEMO_PROGRAM_ID)
-        .instruction();
-    context.send(ix, &[&fixture.user_a]).expect("ReclaimDvp A")
+        .instruction()
 }
 
 pub fn assert_settle_dvp(context: &mut TestContext, fixture: &DvpFixture) -> TransactionMetadata {
-    let ix = SettleDvpBuilder::new()
+    context
+        .send(settle_dvp_ix(fixture), &[&fixture.settlement_authority])
+        .expect("SettleDvp")
+}
+
+pub fn settle_dvp_ix(fixture: &DvpFixture) -> Instruction {
+    SettleDvpBuilder::new()
         .settlement_authority(fixture.settlement_authority.pubkey())
         .swap_dvp(fixture.swap_dvp)
         .mint_a(fixture.mint_a)
@@ -230,10 +242,7 @@ pub fn assert_settle_dvp(context: &mut TestContext, fixture: &DvpFixture) -> Tra
         .token_program_b(fixture.token_program_b)
         .memo_program(MEMO_PROGRAM_ID)
         .leg_a_extras_count(0)
-        .instruction();
-    context
-        .send(ix, &[&fixture.settlement_authority])
-        .expect("SettleDvp")
+        .instruction()
 }
 
 pub fn assert_cancel_dvp(context: &mut TestContext, fixture: &DvpFixture) -> TransactionMetadata {

@@ -464,44 +464,53 @@ fn create_rejects_blocked_extension_after_permissioned_burn() {
     }
 }
 
-/// An unknown extension type between ConfidentialTransferMint and the fee
-/// config must reject leg B before any CPI.
+/// Invalid TLV must fail before the CT lookup or any CPI, regardless of order.
 #[test]
 fn create_rejects_unknown_extension_type_on_leg_b() {
     use ExtensionType::*;
-    let mut context = TestContext::new();
-    let f = ConfidentialDvpFixture::new(&mut context, true, false);
-    let extensions = [
-        ConfidentialTransferMint,
-        PermissionedBurn,
-        TransferFeeConfig,
-        ConfidentialTransferFeeConfig,
-    ];
-    set_leg_b_mint(&mut context, &f.accounts.mint_b, &extensions, Some(0));
-    let mut account = context.get_account(&f.accounts.mint_b).unwrap();
-    let mut offset = MINT_2022_FIRST_TLV_OFFSET;
-    loop {
-        let kind = u16::from_le_bytes([account.data[offset], account.data[offset + 1]]);
-        if kind == PermissionedBurn as u16 {
-            account.data[offset..offset + 2].copy_from_slice(&u16::MAX.to_le_bytes());
-            break;
+    for (first, second, malformed) in [
+        (ConfidentialTransferMint, PermissionedBurn, false),
+        (PermissionedBurn, ConfidentialTransferMint, false),
+        (PermissionedBurn, ConfidentialTransferMint, true),
+    ] {
+        let mut context = TestContext::new();
+        let f = ConfidentialDvpFixture::new(&mut context, true, false);
+        let extensions = [
+            first,
+            second,
+            TransferFeeConfig,
+            ConfidentialTransferFeeConfig,
+        ];
+        set_leg_b_mint(&mut context, &f.accounts.mint_b, &extensions, Some(0));
+        let mut account = context.get_account(&f.accounts.mint_b).unwrap();
+        let mut offset = MINT_2022_FIRST_TLV_OFFSET;
+        if first != PermissionedBurn {
+            offset +=
+                4 + u16::from_le_bytes(account.data[offset + 2..offset + 4].try_into().unwrap())
+                    as usize;
         }
-        offset +=
-            4 + u16::from_le_bytes([account.data[offset + 2], account.data[offset + 3]]) as usize;
-    }
-    context.svm.set_account(f.accounts.mint_b, account).unwrap();
+        assert_eq!(
+            account.data[offset..offset + 2],
+            (PermissionedBurn as u16).to_le_bytes()
+        );
+        account.data[offset..offset + 2].copy_from_slice(&u16::MAX.to_le_bytes());
+        if malformed {
+            account.data[offset + 2..offset + 4].copy_from_slice(&u16::MAX.to_le_bytes());
+        }
+        context.svm.set_account(f.accounts.mint_b, account).unwrap();
 
-    let failure = send_v1(&mut context, &f.create_instructions(), &[]).unwrap_err();
-    assert_eq!(
-        failure.err,
-        solana_transaction::TransactionError::InstructionError(
-            1,
-            InstructionError::InvalidAccountData,
-        ),
-        "{:?}",
-        failure.meta.logs
-    );
-    assert!(!failure.meta.logs.iter().any(|s| s.contains("invoke [2]")));
+        let failure = send_v1(&mut context, &f.create_instructions(), &[]).unwrap_err();
+        assert_eq!(
+            failure.err,
+            solana_transaction::TransactionError::InstructionError(
+                1,
+                InstructionError::InvalidAccountData,
+            ),
+            "{:?}",
+            failure.meta.logs
+        );
+        assert!(!failure.meta.logs.iter().any(|s| s.contains("invoke [2]")));
+    }
 }
 
 #[test]

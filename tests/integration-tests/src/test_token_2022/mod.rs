@@ -43,7 +43,7 @@ use spl_token_2022_interface::{
 use crate::{
     state_utils::{
         assert_cancel_dvp, assert_create_dvp, assert_fund_a, assert_fund_a_amount, assert_fund_b,
-        assert_fund_b_amount, assert_reclaim_a, assert_reject_dvp, assert_settle_dvp,
+        assert_fund_b_amount, assert_reclaim_a, assert_reject_dvp, assert_settle_dvp, reclaim_a_ix,
         setup_dvp_with_programs, AMOUNT_A, AMOUNT_B, INITIAL_BALANCE, REF_STRING,
     },
     utils::{
@@ -55,7 +55,8 @@ use crate::{
         set_mint_2022_with_transfer_hook, set_mint_with_authority,
         set_token_2022_with_hook_account, set_token_2022_with_memo_required, set_token_balance,
         setup_hook_mint, setup_malicious_hook_mint, TestContext, BLOCKED_MINT_EXTENSION,
-        MEMO_PROGRAM_ID, MINT_AUTHORITY_CHANGED, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID,
+        MEMO_PROGRAM_ID, MINT_2022_FIRST_TLV_OFFSET, MINT_AUTHORITY_CHANGED, TOKEN_2022_PROGRAM_ID,
+        TOKEN_PROGRAM_ID,
     },
 };
 
@@ -1796,6 +1797,64 @@ fn test_reclaim_with_memo_required_destination() {
         get_token_balance(&context, &fixture.user_a_ata_a),
         INITIAL_BALANCE
     );
+}
+
+#[test]
+fn test_reclaim_parses_memo_after_an_unknown_extension() {
+    for extension_len in [0u16, u16::MAX] {
+        let mut context = TestContext::new();
+        let fixture = setup_dvp_with_programs(
+            &mut context,
+            0,
+            TOKEN_2022_PROGRAM_ID,
+            TOKEN_2022_PROGRAM_ID,
+        );
+        assert_create_dvp(&mut context, &fixture);
+        assert_fund_a(&mut context, &fixture);
+        set_token_2022_with_memo_required(
+            &mut context,
+            &fixture.user_a_ata_a,
+            &fixture.mint_a,
+            &fixture.user_a.pubkey(),
+            INITIAL_BALANCE - AMOUNT_A,
+        );
+        let mut recipient = context.get_account(&fixture.user_a_ata_a).unwrap();
+        let unknown = u16::MAX
+            .to_le_bytes()
+            .into_iter()
+            .chain(extension_len.to_le_bytes());
+        recipient.data.splice(
+            MINT_2022_FIRST_TLV_OFFSET..MINT_2022_FIRST_TLV_OFFSET,
+            unknown,
+        );
+        recipient.lamports = recipient.lamports.max(
+            context
+                .svm
+                .minimum_balance_for_rent_exemption(recipient.data.len()),
+        );
+        context
+            .svm
+            .set_account(fixture.user_a_ata_a, recipient)
+            .unwrap();
+
+        let result = context.send(reclaim_a_ix(&fixture), &[&fixture.user_a]);
+        if extension_len == 0 {
+            let meta = result.expect("Reclaim with a well-formed unknown extension");
+            assert!(meta
+                .logs
+                .iter()
+                .any(|log| log == &format!("Program {MEMO_PROGRAM_ID} invoke [2]")));
+            assert_eq!(
+                get_token_balance(&context, &fixture.user_a_ata_a),
+                INITIAL_BALANCE
+            );
+        } else {
+            let logs = result.as_ref().err().cloned().unwrap_or_default();
+            assert_instruction_error(result, "InvalidAccountData");
+            assert!(!logs.contains("invoke [2]"), "{logs}");
+            assert_eq!(get_token_balance(&context, &fixture.dvp_ata_a), AMOUNT_A);
+        }
+    }
 }
 
 /// Every Settle destination (both deliveries and both surplus refunds)

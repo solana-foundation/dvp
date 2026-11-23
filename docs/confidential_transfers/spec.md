@@ -353,7 +353,7 @@ Accounts:
 
 Steps, after all CreateDvp checks (`ZeroAmount` applies to `amount_a` only):
 
-1. `mint_b` is owned by Token-2022 and has `ConfidentialTransferMint`, else `MintNotConfidential`. With `auto_approve_new_accounts = false` the mint must have a CT authority, else `MintConfidentialApprovalImpossible`. `TransferHook` is allowed (section 8); confidential transfer fees are rejected, as TransferFee is today.
+1. `mint_b` is owned by Token-2022, else `MintNotConfidential`. The full extension list must parse with known types, else `InvalidAccountData`. A valid mint must have `ConfidentialTransferMint`, else `MintNotConfidential`. With `auto_approve_new_accounts = false` the mint must have a CT authority, else `MintConfidentialApprovalImpossible`. `TransferHook` is allowed (section 8); confidential transfer fees are rejected, as TransferFee is today.
 2. Create the escrow B ATA and run `verify_escrow_not_preloaded` before `Reallocate`, since it compares lamports with the rent of the current size.
 3. Escrow B's public `amount == 0`, else `EscrowPublicBalanceNotEmpty`. Its address is predictable, so it could hold someone else's public tokens before Create. Those are recovered through a public swap on the same seeds (`CreateDvp`, then Reclaim); the confidential swap uses another nonce.
 4. PDA signs: `Reallocate` (adds `ConfidentialTransferAccount`, payer funds) → `ConfigureAccount` (`decryptable_zero_balance`, `maximum_pending_balance_credit_counter = 65536`, PubkeyValidity read through the instructions sysvar) → `DisableNonConfidentialCredits`.

@@ -15,8 +15,8 @@ use spl_token_2022_interface::{
 use super::build_create_dvp_ix;
 use crate::{
     state_utils::{
-        assert_create_dvp, assert_fund_a, assert_fund_b, assert_settle_dvp,
-        setup_dvp_with_programs, DvpFixture, AMOUNT_A, AMOUNT_B,
+        assert_create_dvp, assert_fund_a, assert_fund_b, assert_reclaim_a, assert_settle_dvp,
+        settle_dvp_ix, setup_dvp_with_programs, DvpFixture, AMOUNT_A, AMOUNT_B, INITIAL_BALANCE,
     },
     utils::{
         assert_instruction_error, assert_program_error, get_token_balance, token_2022_mint_account,
@@ -115,6 +115,43 @@ fn create_rejects_unknown_extension_type() {
         assert_instruction_error(result, "InvalidAccountData");
         assert!(!logs.contains("invoke [2]"), "{logs}");
     }
+}
+
+#[test]
+fn settle_rejects_an_extension_added_after_create_and_reclaim_still_works() {
+    let mut context = TestContext::new();
+    let fixture = setup(&mut context);
+    set_permissioned_burn_mint(&mut context, &fixture.mint_a, Next::None);
+    assert_create_dvp(&mut context, &fixture);
+    assert_fund_a(&mut context, &fixture);
+    assert_fund_b(&mut context, &fixture);
+
+    // Model a mint reallocation by a newer Token-2022 program.
+    let mut mint = context.get_account(&fixture.mint_a).unwrap();
+    mint.data.extend_from_slice(&u16::MAX.to_le_bytes());
+    mint.data.extend_from_slice(&[0, 0]);
+    mint.lamports = mint.lamports.max(
+        context
+            .svm
+            .minimum_balance_for_rent_exemption(mint.data.len()),
+    );
+    context.svm.set_account(fixture.mint_a, mint).unwrap();
+
+    let result = context.send(settle_dvp_ix(&fixture), &[&fixture.settlement_authority]);
+    let logs = result.as_ref().err().cloned().unwrap_or_default();
+    assert_instruction_error(result, "InvalidAccountData");
+    assert!(!logs.contains("invoke [2]"), "{logs}");
+    assert_eq!(get_token_balance(&context, &fixture.dvp_ata_a), AMOUNT_A);
+    assert_eq!(get_token_balance(&context, &fixture.dvp_ata_b), AMOUNT_B);
+
+    assert!(context.now() < fixture.expiry);
+    assert_reclaim_a(&mut context, &fixture);
+    assert_eq!(get_token_balance(&context, &fixture.dvp_ata_a), 0);
+    assert_eq!(
+        get_token_balance(&context, &fixture.user_a_ata_a),
+        INITIAL_BALANCE
+    );
+    assert_eq!(get_token_balance(&context, &fixture.dvp_ata_b), AMOUNT_B);
 }
 
 #[test]

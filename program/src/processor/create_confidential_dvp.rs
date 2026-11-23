@@ -9,13 +9,12 @@ use crate::{
     },
     processor::shared::confidential::{
         configure_confidential_account_cpi, disable_non_confidential_credits_cpi,
-        reallocate_confidential_account_cpi, verify_confidential_escrow_approvable,
-        verify_confidential_mint, verify_no_transfer_fee,
+        reallocate_confidential_account_cpi, verify_confidential_create_mint,
     },
     processor::shared::pda_utils::create_pda_account,
     processor::shared::token_utils::{
-        get_mint_authority, get_token_account_balance, verify_canonical_ata,
-        verify_escrow_not_preloaded,
+        get_mint_authority, get_token_account_balance, validate_mint_extensions,
+        verify_canonical_ata, verify_escrow_not_preloaded,
     },
     require, require_len,
     state::swap_dvp::{
@@ -70,9 +69,7 @@ pub fn process_create_confidential_dvp(
         token_program_b_info.address() == &pinocchio_token_2022::ID,
         DvpSwapProgramError::MintNotConfidential
     );
-    verify_confidential_mint(mint_b_info)?;
-    verify_confidential_escrow_approvable(mint_b_info)?;
-    verify_no_transfer_fee(mint_b_info)?;
+    verify_confidential_create_mint(mint_b_info)?;
     verify_ata_program(associated_token_program_info)?;
     require!(
         instructions_sysvar_info.address() == &pinocchio::sysvars::instructions::INSTRUCTIONS_ID,
@@ -87,8 +84,8 @@ pub fn process_create_confidential_dvp(
         mint_b_info,
         token_program_a_info,
         token_program_b_info,
-        clock.epoch,
     )?;
+    validate_mint_extensions(mint_a_info, clock.epoch, true)?;
 
     let now = clock.unix_timestamp;
     validate_args(

@@ -1,6 +1,10 @@
+extern crate alloc;
+
+use alloc::vec::Vec;
 use core::mem::MaybeUninit;
 use core::slice::from_raw_parts;
 
+use bytemuck::Pod;
 use pinocchio::{
     account::AccountView,
     address::Address,
@@ -16,8 +20,8 @@ use pinocchio_token_2022::{
     state::TokenAccount as Token2022Account, ID as TOKEN_2022_PROGRAM_ID,
 };
 use spl_token_2022_interface::extension::{
-    memo_transfer::memo_required, transfer_fee::TransferFeeConfig, BaseStateWithExtensions,
-    ExtensionType, StateWithExtensions,
+    memo_transfer::MemoTransfer, transfer_fee::TransferFeeConfig, BaseStateWithExtensions,
+    Extension, ExtensionType, StateWithExtensions,
 };
 use spl_token_2022_interface::state::{
     Account as Token2022AccountState, Mint as Token2022MintState,
@@ -276,6 +280,75 @@ pub fn get_mint_authority(mint_info: &AccountView) -> Result<Option<Address>, Pr
     Err(ProgramError::InvalidAccountOwner)
 }
 
+/// A Token-2022 mint whose whole extension list parses with known types.
+/// Read mint extensions only through this view: an SDK lookup stops at an
+/// entry it can't parse and would miss a blocked extension after it.
+pub(super) struct CheckedMint<'a> {
+    state: StateWithExtensions<'a, Token2022MintState>,
+    types: Vec<ExtensionType>,
+}
+
+impl<'a> CheckedMint<'a> {
+    /// Rejects malformed TLV and unknown extension types with `InvalidAccountData`.
+    pub(super) fn unpack(data: &'a [u8]) -> Result<Self, ProgramError> {
+        let state = StateWithExtensions::<Token2022MintState>::unpack(data)
+            .map_err(|_| ProgramError::InvalidAccountData)?;
+        let types = state
+            .get_extension_types()
+            .map_err(|_| ProgramError::InvalidAccountData)?;
+        Ok(Self { state, types })
+    }
+
+    pub(super) fn has(&self, extension: ExtensionType) -> bool {
+        self.types.contains(&extension)
+    }
+
+    pub(super) fn extension<V: Extension + Pod>(&self) -> Result<Option<&V>, ProgramError> {
+        if !self.has(V::TYPE) {
+            return Ok(None);
+        }
+        self.state
+            .get_extension::<V>()
+            .map(Some)
+            .map_err(|_| ProgramError::InvalidAccountData)
+    }
+}
+
+/// Find `V` among a Token-2022 account's extensions. Unknown types are
+/// skipped by their length, so a destination the program doesn't control
+/// can carry newer account extensions without blocking transfers or
+/// refunds, and they can't hide `V`. Truncated records and a duplicate `V`
+/// are rejected. Mints use [`CheckedMint`], where an unknown type must
+/// reject the mint.
+pub(super) fn find_account_extension<'a, V: Extension + Pod>(
+    account: &'a StateWithExtensions<'_, Token2022AccountState>,
+) -> Result<Option<&'a V>, ProgramError> {
+    let mut tlv = account.get_tlv_data();
+    let mut found = None;
+    // Like the SDK, treat a final unused byte as reallocation padding.
+    while let Some((kind, rest)) = tlv.split_first_chunk::<2>() {
+        let kind = u16::from_le_bytes(*kind);
+        if kind == u16::from(ExtensionType::Uninitialized) {
+            break;
+        }
+        let (length, rest) = rest
+            .split_first_chunk::<2>()
+            .ok_or(ProgramError::InvalidAccountData)?;
+        let (value, rest) = rest
+            .split_at_checked(usize::from(u16::from_le_bytes(*length)))
+            .ok_or(ProgramError::InvalidAccountData)?;
+        if kind == u16::from(V::TYPE) {
+            require!(found.is_none(), ProgramError::InvalidAccountData);
+            found = Some(
+                bytemuck::try_from_bytes::<V>(value)
+                    .map_err(|_| ProgramError::InvalidAccountData)?,
+            );
+        }
+        tlv = rest;
+    }
+    Ok(found)
+}
+
 /// Validate the public DvP mint-extension policy.
 /// `NonTransferable` is blocked: a balance that reaches the escrow (e.g. the
 /// authority mints straight to it) can never be transferred out, stranding
@@ -317,9 +390,11 @@ pub fn get_mint_authority(mint_info: &AccountView) -> Result<Option<Address>, Pr
 /// program can solve.
 ///
 /// A mint whose TLV list doesn't fully parse is rejected, including one
-/// with an extension type this program's Token-2022 parser doesn't know.
-/// Token-2022 initializes mint extensions only before `InitializeMint`, so
-/// this doesn't change Settle for mints accepted at Create.
+/// with an extension type the pinned Token-2022 parser doesn't know. Some
+/// extensions can be added after `InitializeMint`, so an issuer adding an
+/// unknown one after Create makes Settle reject even a funded swap until
+/// the program is upgraded to a parser that knows the type. Parties can
+/// reclaim before expiry, subject to Token-2022 transfer rules.
 ///
 /// Called at CreateDvp and SettleDvp. Recovery instructions skip this check:
 /// refunds can incur fees after a rate increase. If an escrow holds withheld
@@ -344,23 +419,19 @@ pub fn validate_mint_extensions(
     }
 
     let data = mint_info.try_borrow()?;
-    let mint = StateWithExtensions::<Token2022MintState>::unpack(&data)
-        .map_err(|_| ProgramError::InvalidAccountData)?;
-    // Parse the whole TLV list first. A lookup stops at an entry it can't
-    // parse, such as an unknown extension type, and would miss a blocked
-    // extension after it.
-    let types = mint
-        .get_extension_types()
-        .map_err(|_| ProgramError::InvalidAccountData)?;
+    validate_token_2022_mint_extensions(&CheckedMint::unpack(&data)?, epoch, check_scheduled_fee)
+}
 
-    if types.contains(&ExtensionType::NonTransferable) {
+pub(super) fn validate_token_2022_mint_extensions(
+    mint: &CheckedMint,
+    epoch: u64,
+    check_scheduled_fee: bool,
+) -> ProgramResult {
+    if mint.has(ExtensionType::NonTransferable) {
         return Err(DvpSwapProgramError::BlockedMintExtension.into());
     }
 
-    if types.contains(&ExtensionType::TransferFeeConfig) {
-        let config = mint
-            .get_extension::<TransferFeeConfig>()
-            .map_err(|_| ProgramError::InvalidAccountData)?;
+    if let Some(config) = mint.extension::<TransferFeeConfig>()? {
         let active_rate = u16::from(config.get_epoch_fee(epoch).transfer_fee_basis_points);
         // Once newer_transfer_fee is active, older_transfer_fee is historical.
         // Only Create rejects a future increase; Settle can finish at zero rate
@@ -403,7 +474,11 @@ pub fn requires_memo(to: &AccountView) -> Result<bool, ProgramError> {
     let data = to.try_borrow()?;
     let account = StateWithExtensions::<Token2022AccountState>::unpack(&data)
         .map_err(|_| ProgramError::InvalidAccountData)?;
-    Ok(memo_required(&account))
+
+    // SDK `memo_required` treats any lookup error, including an unknown
+    // extension type before MemoTransfer, as no memo required.
+    Ok(find_account_extension::<MemoTransfer>(&account)?
+        .is_some_and(|memo| bool::from(memo.require_incoming_transfer_memos)))
 }
 
 /// CPI the Memo program so it is the immediately preceding sibling of the

@@ -97,8 +97,10 @@ pub fn process_create_dvp(
         mint_b_info,
         token_program_a_info,
         token_program_b_info,
-        clock.epoch,
     )?;
+    // New trades require both active and scheduled transfer-fee rates to be zero.
+    validate_mint_extensions(mint_a_info, clock.epoch, true)?;
+    validate_mint_extensions(mint_b_info, clock.epoch, true)?;
 
     let now = clock.unix_timestamp;
     validate_args(
@@ -454,7 +456,6 @@ fn validate_args(
 
 /// Account checks shared by public and confidential Create. Mode-specific
 /// token program and mint checks stay with each handler.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn verify_create_accounts(
     settlement_authority: &AccountView,
     user_a: &AccountView,
@@ -463,7 +464,6 @@ pub(super) fn verify_create_accounts(
     mint_b: &AccountView,
     token_program_a: &AccountView,
     token_program_b: &AccountView,
-    epoch: u64,
 ) -> ProgramResult {
     // settlement_authority receives the closed-account rent at Settle/Cancel.
     // An executable account can't be credited lamports (ExecutableLamportChange),
@@ -480,10 +480,7 @@ pub(super) fn verify_create_accounts(
     verify_party_signer_capable(user_a)?;
     verify_party_signer_capable(user_b)?;
     verify_account_owner(mint_a, token_program_a.address())?;
-    verify_account_owner(mint_b, token_program_b.address())?;
-    // New trades require both active and scheduled transfer-fee rates to be zero.
-    validate_mint_extensions(mint_a, epoch, true)?;
-    validate_mint_extensions(mint_b, epoch, true)
+    verify_account_owner(mint_b, token_program_b.address())
 }
 
 /// Swap terms shared by public and confidential Create.
