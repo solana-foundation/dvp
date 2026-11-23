@@ -2,16 +2,21 @@
 
 use pinocchio::{account::AccountView, error::ProgramError, ProgramResult};
 use pinocchio_token_2022::ID as TOKEN_2022_PROGRAM_ID;
-use spl_token_2022::{
+use spl_token_2022_interface::{
     extension::{
         confidential_transfer::{ConfidentialTransferAccount, ConfidentialTransferMint},
-        transfer_fee::TransferFeeConfig,
-        BaseStateWithExtensions, ExtensionType, StateWithExtensions,
+        ExtensionType, StateWithExtensions,
     },
-    state::{Account, Mint},
+    state::Account,
 };
 
-use crate::{error::DvpSwapProgramError, require};
+use crate::{
+    error::DvpSwapProgramError,
+    processor::shared::token_utils::{
+        find_account_extension, validate_token_2022_mint_extensions, CheckedMint,
+    },
+    require,
+};
 
 #[inline(always)]
 fn confidential_account(
@@ -23,17 +28,7 @@ fn confidential_account(
     let data = account.try_borrow()?;
     let state = StateWithExtensions::<Account>::unpack(&data)
         .map_err(|_| ProgramError::InvalidAccountData)?;
-    let types = state
-        .get_extension_types()
-        .map_err(|_| ProgramError::InvalidAccountData)?;
-    if !types.contains(&ExtensionType::ConfidentialTransferAccount) {
-        return Ok(None);
-    }
-    state
-        .get_extension::<ConfidentialTransferAccount>()
-        .copied()
-        .map(Some)
-        .map_err(|_| ProgramError::InvalidAccountData)
+    Ok(find_account_extension::<ConfidentialTransferAccount>(&state)?.copied())
 }
 
 /// Returns an owned view so no account-data borrow survives a subsequent CPI.
@@ -66,38 +61,45 @@ pub fn check_confidential_recipient(account: &AccountView) -> ProgramResult {
 }
 
 /// The extension identifies confidential escrow after SwapDvp has closed.
-/// Parse the entire TLV list so malformed extension data cannot bypass the guard.
+/// Malformed TLV is rejected, so it cannot hide the extension from the guard.
 #[inline(always)]
 pub fn has_confidential_transfer_account(info: &AccountView) -> Result<bool, ProgramError> {
     Ok(confidential_account(info)?.is_some())
 }
 
-/// Confidential leg B requires Token-2022 and the mint's CT configuration.
+/// Validate and read leg B's extensions once before configuring the escrow.
 #[inline(always)]
-pub fn verify_confidential_mint(mint: &AccountView) -> ProgramResult {
+pub fn verify_confidential_create_mint(mint: &AccountView) -> ProgramResult {
     require!(
         mint.owned_by(&TOKEN_2022_PROGRAM_ID),
         DvpSwapProgramError::MintNotConfidential
     );
     let data = mint.try_borrow()?;
-    let state =
-        StateWithExtensions::<Mint>::unpack(&data).map_err(|_| ProgramError::InvalidAccountData)?;
-    state
-        .get_extension::<ConfidentialTransferMint>()
-        .map_err(|_| DvpSwapProgramError::MintNotConfidential)?;
+    let state = CheckedMint::unpack(&data)?;
+    let config = state
+        .extension::<ConfidentialTransferMint>()?
+        .ok_or(DvpSwapProgramError::MintNotConfidential)?;
+    // Without auto-approval, only the CT authority can approve the escrow.
+    require!(
+        bool::from(config.auto_approve_new_accounts) || config.authority.as_ref().is_some(),
+        DvpSwapProgramError::MintConfidentialApprovalImpossible
+    );
+    // Even a zero-rate fee config requires fee proofs on confidential transfers.
+    require!(
+        !state.has(ExtensionType::TransferFeeConfig) && !state.has(ExtensionType::NonTransferable),
+        DvpSwapProgramError::BlockedMintExtension
+    );
     Ok(())
 }
 
-/// Leg B rejects TransferFeeConfig at any rate: confidential transfers on fee
-/// mints need fee proofs, which Settle doesn't build.
+/// Leg B still needs the CT config at Settle. Its escrow is already approved.
 #[inline(always)]
-pub fn verify_no_transfer_fee(mint: &AccountView) -> ProgramResult {
+pub fn verify_confidential_settle_mint(mint: &AccountView, epoch: u64) -> ProgramResult {
     let data = mint.try_borrow()?;
-    let state =
-        StateWithExtensions::<Mint>::unpack(&data).map_err(|_| ProgramError::InvalidAccountData)?;
-    require!(
-        state.get_extension::<TransferFeeConfig>().is_err(),
-        DvpSwapProgramError::BlockedMintExtension
-    );
+    let state = CheckedMint::unpack(&data)?;
+    validate_token_2022_mint_extensions(&state, epoch, false)?;
+    state
+        .extension::<ConfidentialTransferMint>()?
+        .ok_or(DvpSwapProgramError::MintNotConfidential)?;
     Ok(())
 }

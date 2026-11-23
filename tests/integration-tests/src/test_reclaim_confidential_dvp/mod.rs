@@ -346,3 +346,92 @@ fn hook_changed_after_funding_rejects_atomically() {
         AMOUNT_A
     );
 }
+
+/// Appends a well-formed (`len = 0`) or truncated (`len = u16::MAX`) entry of
+/// an extension type the program's Token-2022 parser doesn't know.
+fn append_unknown_extension(context: &mut TestContext, address: &Address, len: u16) {
+    let mut account = context.get_account(address).unwrap();
+    account.data.extend_from_slice(&u16::MAX.to_le_bytes());
+    account.data.extend_from_slice(&len.to_le_bytes());
+    account.lamports = account.lamports.max(
+        context
+            .svm
+            .minimum_balance_for_rent_exemption(account.data.len()),
+    );
+    context.svm.set_account(*address, account).unwrap();
+}
+
+/// An unknown extension added to mint_b after funding blocks Settle
+/// (`revalidates_both_mints_before_any_transfer`), but leg B can still be
+/// reclaimed before expiry.
+#[test]
+fn reclaims_leg_b_after_unknown_mint_extension() {
+    let mut context = TestContext::new();
+    let (f, keys) = setup_refund(&mut context, 0, AMOUNT_B, false);
+    let refund = prepare_refund(
+        &mut context,
+        &f,
+        &keys,
+        f.user_b.pubkey(),
+        AMOUNT_B,
+        AMOUNT_B,
+        true,
+    );
+    append_unknown_extension(&mut context, &f.accounts.mint_b, 0);
+    assert!(context.now() < f.args.expiry_timestamp);
+
+    send_v1(
+        &mut context,
+        &[reclaim(&f, false, &refund, &[])],
+        &[&f.user_b],
+    )
+    .unwrap();
+    assert_contexts_closed(&context, &refund);
+    assert_eq!(available(&context, &f), 0);
+    assert_eq!(
+        pending(
+            &context,
+            &dvp_ata(&f.user_b.pubkey(), &f.accounts.mint_b, &TOKEN),
+            &keys
+        ),
+        AMOUNT_B
+    );
+}
+
+/// A destination may carry account extensions newer than the program's
+/// parser. They are skipped by length, while a truncated entry is rejected
+/// before any CPI.
+#[test]
+fn reclaims_leg_b_to_destination_with_unknown_extension() {
+    for len in [0, u16::MAX] {
+        let mut context = TestContext::new();
+        let (f, keys) = setup_refund(&mut context, 0, AMOUNT_B, false);
+        let refund = prepare_refund(
+            &mut context,
+            &f,
+            &keys,
+            f.user_b.pubkey(),
+            AMOUNT_B,
+            AMOUNT_B,
+            true,
+        );
+        let destination = dvp_ata(&f.user_b.pubkey(), &f.accounts.mint_b, &TOKEN);
+        append_unknown_extension(&mut context, &destination, len);
+        let ix = reclaim(&f, false, &refund, &[]);
+
+        if len == 0 {
+            send_v1(&mut context, &[ix], &[&f.user_b]).unwrap();
+            assert_contexts_closed(&context, &refund);
+            assert_eq!(available(&context, &f), 0);
+            assert_eq!(pending(&context, &destination, &keys), AMOUNT_B);
+        } else {
+            assert_failure(
+                &mut context,
+                ix,
+                &f.user_b,
+                InstructionError::InvalidAccountData,
+                true,
+            );
+        }
+    }
+}

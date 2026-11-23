@@ -493,6 +493,12 @@
         "kind": "errorNode",
         "message": "A confidential refund is required for leg B",
         "name": "legBRefundRequired"
+      },
+      {
+        "code": 37,
+        "kind": "errorNode",
+        "message": "Mint confidential accounts can never be approved",
+        "name": "mintConfidentialApprovalImpossible"
       }
     ],
     "instructions": [

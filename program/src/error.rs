@@ -182,6 +182,11 @@ pub enum DvpSwapProgramError {
     #[error("A confidential refund is required for leg B")]
     #[codama(name = "leg_b_refund_required")]
     LegBRefundRequired,
+
+    /// (37) Mint requires approval of new confidential accounts but has no
+    /// confidential transfer authority to approve them.
+    #[error("Mint confidential accounts can never be approved")]
+    MintConfidentialApprovalImpossible,
 }
 
 impl From<DvpSwapProgramError> for ProgramError {

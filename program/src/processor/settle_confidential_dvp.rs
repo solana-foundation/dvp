@@ -5,8 +5,8 @@ use crate::{
         confidential::{
             check_confidential_amount, check_confidential_recipient, check_proof_context,
             check_transfer_contexts, close_proof_context_cpi, confidential_transfer_cpi,
-            empty_confidential_account_if_no_pending, verify_confidential_mint, CtTransferData,
-            ProofType, ZK_ELGAMAL_PROOF_PROGRAM_ID,
+            empty_confidential_account_if_no_pending, verify_confidential_settle_mint,
+            CtTransferData, ProofType, ZK_ELGAMAL_PROOF_PROGRAM_ID,
         },
         token_utils::{
             get_mint_authority, get_mint_decimals, get_token_account_balance, transfer_checked_cpi,
@@ -117,8 +117,7 @@ fn settle(
     );
     let clock = Clock::get()?;
     validate_mint_extensions(mint_a_info, clock.epoch, false)?;
-    validate_mint_extensions(mint_b_info, clock.epoch, false)?;
-    verify_confidential_mint(mint_b_info)?;
+    verify_confidential_settle_mint(mint_b_info, clock.epoch)?;
     require!(
         get_mint_authority(mint_a_info)?.unwrap_or_default() == dvp.mint_a_authority
             && get_mint_authority(mint_b_info)?.unwrap_or_default() == dvp.mint_b_authority,

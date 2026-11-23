@@ -992,6 +992,23 @@ fn revalidates_both_mints_before_any_transfer() {
         context.svm.set_account(address, original).unwrap();
     }
     let original = context.get_account(&accounts.mint_b).unwrap();
+    // Model a newer Token-2022 program adding an extension after funding.
+    let mut extended = original.clone();
+    extended.data.extend_from_slice(&u16::MAX.to_le_bytes());
+    extended.data.extend_from_slice(&[0, 0]);
+    extended.lamports = extended.lamports.max(
+        context
+            .svm
+            .minimum_balance_for_rent_exemption(extended.data.len()),
+    );
+    context.svm.set_account(accounts.mint_b, extended).unwrap();
+    assert_failure(
+        &mut context,
+        &f,
+        ix.clone(),
+        InstructionError::InvalidAccountData,
+        true,
+    );
     // Deliberate layout substitution exercises the guard; removing a live
     // mint's confidential extension is not a Token-2022 operation.
     crate::utils::set_mint(&mut context, &accounts.mint_b, &TOKEN);

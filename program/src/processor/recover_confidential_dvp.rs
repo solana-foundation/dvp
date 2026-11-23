@@ -6,20 +6,15 @@ use crate::{
             check_confidential_escrow, check_confidential_refund, refund_confidential_leg,
             LegBRefund,
         },
+        pda_utils::{SwapDvpPda, SwapDvpSeeds},
         token_utils::{
             get_mint_decimals, get_token_account_balance, transfer_checked_cpi,
             verify_ata_recipient_if_initialized, verify_canonical_ata, MAX_HOOK_REMAINING_ACCOUNTS,
         },
     },
     require, require_len,
-    state::swap_dvp::{NONCE_TOMBSTONE_SEED, SWAP_DVP_SEED},
 };
-use pinocchio::{
-    account::AccountView,
-    cpi::{Seed, Signer},
-    error::ProgramError,
-    Address, ProgramResult,
-};
+use pinocchio::{account::AccountView, cpi::Signer, error::ProgramError, Address, ProgramResult};
 use pinocchio_token_2022::{instructions::CloseAccount, ID as TOKEN_2022_PROGRAM_ID};
 
 const FIXED_ACCOUNTS_LEN: usize = 13;
@@ -89,35 +84,20 @@ fn recover(
         token.address() == &TOKEN_2022_PROGRAM_ID,
         ProgramError::IncorrectProgramId
     );
-    let nonce_bytes = args.nonce.to_le_bytes();
-    let (expected_swap, bump) = Address::find_program_address(
-        &[
-            SWAP_DVP_SEED,
-            args.settlement_authority.as_ref(),
-            args.user_a.as_ref(),
-            args.user_b.as_ref(),
-            args.mint_a.as_ref(),
-            args.mint_b.as_ref(),
-            &nonce_bytes,
-        ],
+    let pda = SwapDvpPda::derive(
         program_id,
-    );
-    require!(swap.address() == &expected_swap, ProgramError::InvalidSeeds);
-    require!(
-        swap.owned_by(&pinocchio_system::ID) && swap.is_data_empty(),
-        DvpSwapProgramError::DvpStillOpen
-    );
-    // With state gone, this tombstone authenticates the supplied seed parties.
-    let (expected_tombstone, _) =
-        Address::find_program_address(&[NONCE_TOMBSTONE_SEED, expected_swap.as_ref()], program_id);
-    require!(
-        tombstone.address() == &expected_tombstone,
-        ProgramError::InvalidAccountData
-    );
-    require!(
-        tombstone.owned_by(program_id),
-        DvpSwapProgramError::DvpNeverCreated
-    );
+        swap,
+        SwapDvpSeeds {
+            settlement_authority: &args.settlement_authority,
+            user_a: &args.user_a,
+            user_b: &args.user_b,
+            mint_a: &args.mint_a,
+            mint_b: &args.mint_b,
+            nonce: args.nonce,
+        },
+    )?;
+    // With state gone, the tombstone authenticates the supplied seed parties.
+    pda.verify_closed(program_id, swap, tombstone)?;
     verify_canonical_ata(escrow, swap.address(), &args.mint_b, token)?;
     verify_account_owner(escrow, token.address())?;
     check_confidential_escrow(escrow)?;
@@ -132,17 +112,7 @@ fn recover(
         zk_program,
         contexts,
     )?;
-    let bump_bytes = [bump];
-    let seeds = [
-        Seed::from(SWAP_DVP_SEED),
-        Seed::from(args.settlement_authority.as_ref()),
-        Seed::from(args.user_a.as_ref()),
-        Seed::from(args.user_b.as_ref()),
-        Seed::from(args.mint_a.as_ref()),
-        Seed::from(args.mint_b.as_ref()),
-        Seed::from(&nonce_bytes),
-        Seed::from(&bump_bytes),
-    ];
+    let seeds = pda.signer_seeds();
     let signers = [Signer::from(&seeds)];
     let reset = refund_confidential_leg(
         &args.leg_b_refund,
